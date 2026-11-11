@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aperçu EDT v2 — en-tête compact</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 p-3 md:p-6 font-sans">
+<div class="max-w-[1700px] mx-auto">
+
+  <p class="text-[11px] text-amber-300 bg-amber-500/10 border border-amber-400/30 rounded-lg px-3 py-2 mb-4">
+    Aperçu non cliquable (données fictives) — maquette de la future v2 : en-tête compact 2 lignes, barre de recherche unique (cours · salle · enseignant · groupe), agenda « Cours », badge n/N, popup avec titre cliquable.
+  </p>
+
+  <!-- ================= AVANT ================= -->
+  <p class="text-[10px] uppercase tracking-wide text-slate-500 mb-1.5">Aujourd'hui — en-tête sur 3 lignes (~180 px au-dessus du 1er agenda)</p>
+  <div class="rounded-2xl border border-slate-800 bg-slate-900/40 p-3 mb-5 opacity-70">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <div>
+        <div class="text-lg md:text-2xl font-bold tracking-tight">Département MP <span class="text-indigo-400">Saint-Étienne</span></div>
+        <div class="text-xs md:text-sm text-slate-400">52 930 créneaux préchargés · 2 agendas</div>
+      </div>
+      <div class="text-xs font-medium bg-indigo-500 rounded-lg px-3.5 py-1.5">Flux &amp; sources</div>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 mb-3">
+      <div class="bg-slate-900 border border-slate-700 rounded-lg w-8 h-8 flex items-center justify-center">‹</div>
+      <div class="bg-slate-900 border border-slate-700 rounded-lg w-8 h-8 flex items-center justify-center">›</div>
+      <div class="text-xs font-medium bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5">Aujourd'hui</div>
+      <span class="text-sm text-slate-300 ml-1.5">16 – 22 novembre 2026</span>
+      <div class="text-xs font-medium bg-slate-100 text-slate-900 rounded-lg px-3 py-1.5 border">Semaine</div>
+      <div class="text-xs font-medium bg-slate-900 text-slate-300 rounded-lg px-3 py-1.5 border border-slate-700">Période</div>
+    </div>
+    <div class="flex flex-col sm:flex-row gap-2.5">
+      <div class="bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-500 flex-1">Rechercher un cours, une salle, un enseignant, un groupe…</div>
+      <div class="flex gap-1.5 flex-wrap">
+        <div class="text-xs font-medium bg-slate-100 text-slate-900 rounded-lg px-3 py-2 border">Tous</div>
+        <div class="text-xs font-medium bg-slate-900 text-slate-300 rounded-lg px-3 py-2 border border-slate-700">TD</div>
+        <div class="text-xs font-medium bg-slate-900 text-slate-300 rounded-lg px-3 py-2 border border-slate-700">TP</div>
+        <div class="text-xs font-medium bg-slate-900 text-slate-300 rounded-lg px-3 py-2 border border-slate-700">CM</div>
+        <div class="text-xs font-medium bg-slate-900 text-slate-300 rounded-lg px-3 py-2 border border-slate-700">Examen</div>
+        <div class="text-xs font-medium bg-slate-900 text-slate-300 rounded-lg px-3 py-2 border border-slate-700">Autre</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= APRÈS ================= -->
+  <p class="text-[10px] uppercase tracking-wide text-indigo-400 mb-1.5">Proposition — en-tête compact 2 lignes (~70 px au-dessus du 1er agenda)</p>
+  <div class="rounded-2xl border border-indigo-500/40 bg-slate-950 p-2 mb-6">
+    <!-- ligne 1 -->
+    <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-1.5">
+      <h1 class="text-sm font-bold tracking-tight">Département MP <span class="text-indigo-400">Saint-Étienne</span>
+        <span class="text-[10px] font-normal text-slate-400">· 52 930 créneaux · MAJ 12/11/2026</span>
+      </h1>
+      <div class="flex items-center gap-1.5">
+        <span class="text-[10px] rounded-full px-2 py-0.5 border bg-emerald-500/15 text-emerald-300 border-emerald-400/40">6 720 créneaux cette semaine</span>
+        <span class="text-[10px] font-medium bg-indigo-500 rounded-lg px-2.5 py-1">Flux &amp; sources</span>
+      </div>
+    </div>
+    <!-- ligne 2 -->
+    <div class="flex flex-wrap items-center gap-1.5">
+      <div class="bg-slate-900 border border-slate-700 rounded-lg w-7 h-7 flex items-center justify-center text-xs">‹</div>
+      <div class="bg-slate-900 border border-slate-700 rounded-lg w-7 h-7 flex items-center justify-center text-xs">›</div>
+      <span class="text-xs text-slate-300 ml-0.5">16 – 22 nov.</span>
+      <div class="text-[11px] font-medium bg-slate-100 text-slate-900 rounded-lg px-2.5 py-1 border border-slate-100">Semaine</div>
+      <div class="text-[11px] font-medium bg-slate-900 text-slate-300 rounded-lg px-2.5 py-1 border border-slate-700">Période</div>
+      <!-- barre unique avec suggestions ouvertes -->
+      <div class="relative flex-1 min-w-[180px]">
+        <div class="bg-slate-900 border border-slate-700 rounded-xl pl-8 pr-3 py-1.5 text-sm text-slate-100 truncate">opt…</div>
+        <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <div class="absolute z-30 left-0 right-0 top-full mt-1 rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
+          <div class="px-3 py-1.5 flex items-center gap-2 border-b border-slate-800/60">
+            <span class="text-[9px] uppercase rounded px-1.5 py-0.5 border bg-indigo-500/15 text-indigo-300 border-indigo-400/40">Cours</span>
+            <span class="text-xs text-slate-100">TD Optique</span>
+            <span class="text-[10px] text-slate-500 ml-auto">6 créneaux · MA1</span>
+          </div>
+          <div class="px-3 py-1.5 flex items-center gap-2 border-b border-slate-800/60">
+            <span class="text-[9px] uppercase rounded px-1.5 py-0.5 border bg-indigo-500/15 text-indigo-300 border-indigo-400/40">Cours</span>
+            <span class="text-xs text-slate-100">TP Optique</span>
+            <span class="text-[10px] text-slate-500 ml-auto">3 créneaux · MA1</span>
+          </div>
+          <div class="px-3 py-1.5 flex items-center gap-2 border-b border-slate-800/60">
+            <span class="text-[9px] uppercase rounded px-1.5 py-0.5 border bg-amber-500/15 text-amber-300 border-amber-400/40">Salle</span>
+            <span class="text-xs text-slate-100">C118</span>
+            <span class="text-[10px] text-slate-500 ml-auto">15 créneaux</span>
+          </div>
+          <div class="px-3 py-1.5 flex items-center gap-2 border-b border-slate-800/60">
+            <span class="text-[9px] uppercase rounded px-1.5 py-0.5 border bg-sky-500/15 text-sky-300 border-sky-400/40">Ens</span>
+            <span class="text-xs text-slate-100">Clerc Muriel</span>
+            <span class="text-[10px] text-slate-500 ml-auto">71 créneaux</span>
+          </div>
+          <div class="px-3 py-1.5 flex items-center gap-2">
+            <span class="text-[9px] uppercase rounded px-1.5 py-0.5 border bg-emerald-500/15 text-emerald-300 border-emerald-400/40">Groupe</span>
+            <span class="text-xs text-slate-100">MA1</span>
+            <span class="text-[10px] text-slate-500 ml-auto">52 créneaux</span>
+          </div>
+        </div>
+      </div>
+      <div class="bg-slate-900 border border-slate-700 rounded-xl px-2 py-1.5 text-xs flex items-center gap-1">Type : <span class="text-slate-100 font-medium">Tous</span> ▾</div>
+    </div>
+  </div>
+
+  <!-- ================= AGENDA 1 : promo ================= -->
+  <p class="text-[10px] uppercase tracking-wide text-slate-500 mb-1.5">Agenda étudiant (badge n/N sur les blocs : position de la séance / total du cours pour ce groupe)</p>
+  <div class="rounded-2xl border border-slate-800 bg-slate-900/60 overflow-hidden mb-6">
+    <div class="flex flex-wrap items-center gap-2 px-3 py-1.5 border-b border-slate-800">
+      <div class="bg-slate-900 border border-slate-700 rounded-lg w-7 h-7 flex items-center justify-center text-xs">▾</div>
+      <div class="flex rounded-lg border border-slate-700 bg-slate-950 overflow-hidden">
+        <span class="text-[10px] font-semibold rounded px-2 py-1 bg-indigo-400 text-slate-900">Étudiant</span>
+        <span class="text-[10px] font-semibold rounded px-2 py-1 text-slate-400">Enseignant</span>
+        <span class="text-[10px] font-semibold rounded px-2 py-1 text-slate-400">Salle</span>
+        <span class="text-[10px] font-semibold rounded px-2 py-1 text-slate-400">Cours</span>
+      </div>
+      <span class="text-xs font-semibold truncate">BUT2 · MA1</span>
+      <span class="text-[10px] text-slate-500">4 créneaux cette sem.</span>
+      <div class="ml-auto flex items-center gap-1.5">
+        <span class="flex items-center gap-0.5">
+          <div class="bg-slate-900 border border-slate-700 rounded-lg w-6 h-6 flex items-center justify-center text-[11px]">‹</div>
+          <span class="text-[10px] text-slate-400 whitespace-nowrap px-0.5">16 – 22 nov.</span>
+          <div class="bg-slate-900 border border-slate-700 rounded-lg w-6 h-6 flex items-center justify-center text-[11px]">›</div>
+        </span>
+        <span class="text-[10px] bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 whitespace-nowrap">⇪ .ics</span>
+      </div>
+    </div>
+    <!-- grille -->
+    <div class="relative" style="height:462px">
+      <!-- colonnes des heures -->
+      <div class="absolute left-0 top-0 w-10 h-full">
+        <div class="relative h-full">
+          <div class="absolute left-1 text-[9px] text-slate-500" style="top:0px">8h</div>
+          <div class="absolute left-1 text-[9px] text-slate-500" style="top:42px">9h</div>
+          <div class="absolute left-1 text-[9px] text-slate-500" style="top:86px">10h</div>
+          <div class="absolute left-1 text-[9px] text-slate-500" style="top:130px">11h</div>
+          <div class="absolute left-1 text-[9px] text-slate-500" style="top:174px">12h</div>
+          <div class="absolute left-1 text-[9px] text-slate-500" style="top:218px">13h</div>
+          <div class="absolute left-1 text-[9px] text-slate-500" style="top:262px">14h</div>
+          <div class="absolute left-1 text-[9px] text-slate-500" style="top:306px">15h</div>
+          <div class="absolute left-1 text-[9px] text-slate-500" style="top:350px">16h</div>
+          <div class="absolute left-1 text-[9px] text-slate-500" style="top:394px">17h</div>
+          <div class="absolute left-1 text-[9px] text-slate-500" style="top:438px">18h</div>
+        </div>
+      </div>
+      <!-- séparateurs horizontaux -->
+      <div class="absolute left-10 right-0 top-0 w-[calc(100%-2.5rem)]">
+        <div class="absolute left-0 right-0 border-t border-slate-800/60" style="top:0"></div>
+        <div class="absolute left-0 right-0 border-t border-slate-800/60" style="top:42px"></div>
+        <div class="absolute left-0 right-0 border-t border-slate-800/60" style="top:86px"></div>
+        <div class="absolute left-0 right-0 border-t border-slate-800/60" style="top:130px"></div>
+        <div class="absolute left-0 right-0 border-t border-slate-800/60" style="top:174px"></div>
+        <div class="absolute left-0 right-0 border-t border-slate-800/60" style="top:218px"></div>
+        <div class="absolute left-0 right-0 border-t border-slate-800/60" style="top:262px"></div>
+        <div class="absolute left-0 right-0 border-t border-slate-800/60" style="top:306px"></div>
+        <div class="absolute left-0 right-0 border-t border-slate-800/60" style="top:350px"></div>
+        <div class="absolute left-0 right-0 border-t border-slate-800/60" style="top:394px"></div>
+        <div class="absolute left-0 right-0 border-t border-slate-800/60" style="top:438px"></div>
+      </div>
+      <!-- en-têtes de jours -->
+      <div class="absolute left-10 right-0 top-1 flex gap-1 text-center">
+        <div class="flex-1 text-[10px] font-semibold text-slate-300">Lun 16</div>
+        <div class="flex-1 text-[10px] font-semibold text-slate-300">Mar 17</div>
+        <div class="flex-1 text-[10px] font-semibold text-slate-300">Mer 18</div>
+        <div class="flex-1 text-[10px] font-semibold text-slate-300">Jeu 19</div>
+        <div class="flex-1 text-[10px] font-semibold text-slate-300">Ven 20</div>
+      </div>
+      <!-- blocs -->
+      <!-- Mar 8h-11h30 : TD Optique 2/6 -->
+      <div class="absolute rounded-lg p-1.5 text-left shadow" style="left:calc(2.5rem + (100% - 2.5rem)*1/5 + 3px);width:calc((100% - 2.5rem)/5 - 6px);top:2px;height:148px;background:#42200e;border-left:3px solid #f59e0b">
+        <div class="text-[11px] font-semibold leading-tight">TD Optique <span class="ml-0.5 text-[8.5px] font-bold text-slate-900 bg-slate-100 rounded px-1">2/6</span></div>
+        <div class="text-[10px] opacity-80">08:00–11:30 · C118</div>
+        <div class="text-[10px] opacity-70">MA1</div>
+      </div>
+      <!-- Mer 10h30-12h : CM Métrologie 3/8 -->
+      <div class="absolute rounded-lg p-1.5 text-left shadow" style="left:calc(2.5rem + (100% - 2.5rem)*2/5 + 3px);width:calc((100% - 2.5rem)/5 - 6px);top:88px;height:62px;background:#1e3a8a;border-left:3px solid #6366f1">
+        <div class="text-[11px] font-semibold leading-tight">CM Métrologie <span class="ml-0.5 text-[8.5px] font-bold text-slate-900 bg-slate-100 rounded px-1">3/8</span></div>
+        <div class="text-[10px] opacity-80">10:30–12:00</div>
+      </div>
+      <!-- Jeu 13h30-16h30 : TP Optique 1/3 -->
+      <div class="absolute rounded-lg p-1.5 text-left shadow" style="left:calc(2.5rem + (100% - 2.5rem)*3/5 + 3px);width:calc((100% - 2.5rem)/5 - 6px);top:220px;height:124px;background:#064e3b;border-left:3px solid #34d399">
+        <div class="text-[11px] font-semibold leading-tight">TP Optique <span class="ml-0.5 text-[8.5px] font-bold text-slate-900 bg-slate-100 rounded px-1">1/3</span></div>
+        <div class="text-[10px] opacity-80">13:30–16:30 · C115</div>
+        <div class="text-[10px] opacity-70">MA1 · Clerc Muriel</div>
+      </div>
+      <!-- Ven 8h-9h30 : Anglais (occurrence unique : pas de badge) -->
+      <div class="absolute rounded-lg p-1.5 text-left shadow" style="left:calc(2.5rem + (100% - 2.5rem)*4/5 + 3px);width:calc((100% - 2.5rem)/5 - 6px);top:2px;height:62px;background:#164e63;border-left:3px solid #22d3ee">
+        <div class="text-[11px] font-semibold leading-tight">Anglais</div>
+        <div class="text-[10px] opacity-80">08:00–09:30 · B212</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= AGENDA 2 : cours ================= -->
+  <p class="text-[10px] uppercase tracking-wide text-slate-500 mb-1.5">Nouveau : agenda « Cours » (comme un agenda enseignant, mais pour un module — toutes ses occurrences)</p>
+  <div class="rounded-2xl border border-slate-800 bg-slate-900/60 overflow-hidden mb-6">
+    <div class="flex flex-wrap items-center gap-2 px-3 py-1.5 border-b border-slate-800">
+      <div class="bg-slate-900 border border-slate-700 rounded-lg w-7 h-7 flex items-center justify-center text-xs">▾</div>
+      <div class="flex rounded-lg border border-slate-700 bg-slate-950 overflow-hidden">
+        <span class="text-[10px] font-semibold rounded px-2 py-1 text-slate-400">Étudiant</span>
+        <span class="text-[10px] font-semibold rounded px-2 py-1 text-slate-400">Enseignant</span>
+        <span class="text-[10px] font-semibold rounded px-2 py-1 text-slate-400">Salle</span>
+        <span class="text-[10px] font-semibold rounded px-2 py-1 bg-indigo-400 text-slate-900">Cours</span>
+      </div>
+      <span class="text-xs font-semibold truncate">Cours · TD Optique (MA1)</span>
+      <span class="text-[10px] font-medium rounded px-1.5 py-0.5 border bg-indigo-500/15 text-indigo-300 border-indigo-400/40">6 occurrences · séance 2/6</span>
+      <span class="text-[10px] text-slate-500">vue Semaine</span>
+    </div>
+    <div class="max-h-64 overflow-y-auto">
+      <div class="border-b border-slate-800/60">
+        <div class="flex items-center gap-2 px-3 py-1.5 sticky top-0 bg-slate-900 border-b border-slate-800/60">
+          <span class="text-[11px] font-semibold capitalize">mercredi 18 novembre</span>
+          <span class="text-[10px] text-slate-500 ml-auto">2 créneaux</span>
+        </div>
+        <div class="px-3 py-1.5 flex items-center gap-2">
+          <span class="w-1.5 h-8 rounded-full flex-none bg-amber-400"></span>
+          <span class="text-[11px] text-slate-400 font-mono w-[86px] flex-none">08:00–11:30</span>
+          <span class="text-xs font-medium truncate">TD Optique <span class="ml-0.5 text-[8.5px] font-bold text-slate-900 bg-slate-100 rounded px-1">2/6</span></span>
+          <span class="text-[10px] text-slate-500 truncate ml-auto">C118 · MA1 · Clerc Muriel</span>
+        </div>
+      </div>
+      <div class="border-b border-slate-800/60">
+        <div class="flex items-center gap-2 px-3 py-1.5 sticky top-0 bg-slate-900 border-b border-slate-800/60">
+          <span class="text-[11px] font-semibold capitalize">mercredi 25 novembre</span>
+          <span class="text-[10px] text-slate-500 ml-auto">1 créneau</span>
+        </div>
+        <div class="px-3 py-1.5 flex items-center gap-2">
+          <span class="w-1.5 h-8 rounded-full flex-none bg-amber-400"></span>
+          <span class="text-[11px] text-slate-400 font-mono w-[86px] flex-none">08:00–11:30</span>
+          <span class="text-xs font-medium truncate">TD Optique <span class="ml-0.5 text-[8.5px] font-bold text-slate-900 bg-slate-100 rounded px-1">3/6</span></span>
+          <span class="text-[10px] text-slate-500 truncate ml-auto">C217 · MA1 · Clerc Muriel</span>
+        </div>
+      </div>
+      <div class="border-b border-slate-800/60">
+        <div class="flex items-center gap-2 px-3 py-1.5 sticky top-0 bg-slate-900 border-b border-slate-800/60">
+          <span class="text-[11px] font-semibold capitalize">mercredi 2 décembre</span>
+          <span class="text-[10px] text-slate-500 ml-auto">1 créneau</span>
+        </div>
+        <div class="px-3 py-1.5 flex items-center gap-2">
+          <span class="w-1.5 h-8 rounded-full flex-none bg-amber-400"></span>
+          <span class="text-[11px] text-slate-400 font-mono w-[86px] flex-none">08:00–11:30</span>
+          <span class="text-xs font-medium truncate">TD Optique <span class="ml-0.5 text-[8.5px] font-bold text-slate-900 bg-slate-100 rounded px-1">4/6</span></span>
+          <span class="text-[10px] text-slate-500 truncate ml-auto">C109 · MA1 · Clerc Muriel</span>
+        </div>
+      </div>
+      <div class="border-b border-slate-800/60 last:border-b-0">
+        <div class="flex items-center gap-2 px-3 py-1.5 sticky top-0 bg-slate-900 border-b border-slate-800/60">
+          <span class="text-[11px] font-semibold capitalize">mercredi 9 décembre</span>
+          <span class="text-[10px] text-slate-500 ml-auto">1 créneau</span>
+        </div>
+        <div class="px-3 py-1.5 flex items-center gap-2">
+          <span class="w-1.5 h-8 rounded-full flex-none bg-amber-400"></span>
+          <span class="text-[11px] text-slate-400 font-mono w-[86px] flex-none">08:00–11:30</span>
+          <span class="text-xs font-medium truncate">TD Optique <span class="ml-0.5 text-[8.5px] font-bold text-slate-900 bg-slate-100 rounded px-1">5/6</span></span>
+          <span class="text-[10px] text-slate-500 truncate ml-auto">C118 · MA1 · Clerc Muriel</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= POPUP ================= -->
+  <p class="text-[10px] uppercase tracking-wide text-slate-500 mb-1.5">Popup détail (au clic sur un cours) — le titre devient cliquable, comme la salle et l'enseignant</p>
+  <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 mb-6 max-w-sm">
+    <div class="flex justify-between items-start mb-3">
+      <h2 class="font-bold text-base">
+        <span class="underline decoration-dotted decoration-indigo-400 underline-offset-2">TD Optique</span>
+        <span class="ml-1.5 align-middle text-[9px] font-bold uppercase rounded px-1.5 py-0.5 border bg-indigo-500/15 text-indigo-300 border-indigo-400/40">cours · cliquable</span>
+      </h2>
+      <span class="text-slate-500 text-lg leading-none">✕</span>
+    </div>
+    <div class="space-y-1.5 text-sm text-slate-300">
+      <p><span class="text-slate-500">Séance :</span> <span class="text-slate-100 font-medium">2/6</span> · prochaines : mer. 25 nov., mer. 2 déc., mer. 9 déc.</p>
+      <p><span class="text-slate-500">Quand :</span> mercredi 18 novembre, 08:00 → 11:30</p>
+      <p class="flex flex-wrap items-center gap-1"><span class="text-slate-500 mr-0.5">Salle :</span>
+        <span class="px-1 rounded underline decoration-dotted">C118</span>
+      </p>
+      <p class="flex flex-wrap items-center gap-1"><span class="text-slate-500 mr-0.5">Groupes :</span>
+        <span class="px-1 rounded underline decoration-dotted">MA1</span>
+      </p>
+      <p class="flex flex-wrap items-center gap-1"><span class="text-slate-500 mr-0.5">Enseignant :</span>
+        <span class="px-1 rounded underline decoration-dotted">Clerc Muriel</span>
+      </p>
+    </div>
+    <div class="mt-3 border border-indigo-400/30 bg-indigo-500/[0.08] rounded-xl p-3">
+      <p class="text-[11px] text-slate-300 mb-2">Ouvrir « TD Optique » :</p>
+      <div class="grid grid-cols-2 gap-1.5">
+        <div class="text-[11px] font-medium bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-center">Remplacer cet agenda</div>
+        <div class="text-[11px] font-medium bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-center">Remplacer l'agenda ci-dessous</div>
+        <div class="text-[11px] font-medium bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-center">Insérer sous cet agenda</div>
+        <div class="text-[11px] font-medium bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-center">Ajouter à la fin</div>
+      </div>
+    </div>
+  </div>
+
+  <p class="text-[10px] text-slate-500 mb-2">
+    Sur mobile : les mêmes éléments se répartissent en 2-3 lignes fines (flex-wrap). Le filtre TD/TP/CM/Examen devient un menu compact « Type : Tous ▾ ». Les champs de saisie salle/enseignant dans les agendas disparaissent : tout passe par la barre unique.
+  </p>
+
+</div>
+</body>
+</html>
