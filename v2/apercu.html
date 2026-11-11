@@ -13,39 +13,8 @@
     Aperçu non cliquable (données fictives) — maquette de la future v2 : en-tête compact 2 lignes, barre de recherche unique (cours · salle · enseignant · groupe), agenda « Cours », badge n/N, popup avec titre cliquable.
   </p>
 
-  <!-- ================= AVANT ================= -->
-  <p class="text-[10px] uppercase tracking-wide text-slate-500 mb-1.5">Aujourd'hui — en-tête sur 3 lignes (~180 px au-dessus du 1er agenda)</p>
-  <div class="rounded-2xl border border-slate-800 bg-slate-900/40 p-3 mb-5 opacity-70">
-    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-      <div>
-        <div class="text-lg md:text-2xl font-bold tracking-tight">Département MP <span class="text-indigo-400">Saint-Étienne</span></div>
-        <div class="text-xs md:text-sm text-slate-400">52 930 créneaux préchargés · 2 agendas</div>
-      </div>
-      <div class="text-xs font-medium bg-indigo-500 rounded-lg px-3.5 py-1.5">Flux &amp; sources</div>
-    </div>
-    <div class="flex flex-wrap items-center gap-2 mb-3">
-      <div class="bg-slate-900 border border-slate-700 rounded-lg w-8 h-8 flex items-center justify-center">‹</div>
-      <div class="bg-slate-900 border border-slate-700 rounded-lg w-8 h-8 flex items-center justify-center">›</div>
-      <div class="text-xs font-medium bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5">Aujourd'hui</div>
-      <span class="text-sm text-slate-300 ml-1.5">16 – 22 novembre 2026</span>
-      <div class="text-xs font-medium bg-slate-100 text-slate-900 rounded-lg px-3 py-1.5 border">Semaine</div>
-      <div class="text-xs font-medium bg-slate-900 text-slate-300 rounded-lg px-3 py-1.5 border border-slate-700">Période</div>
-    </div>
-    <div class="flex flex-col sm:flex-row gap-2.5">
-      <div class="bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-500 flex-1">Rechercher un cours, une salle, un enseignant, un groupe…</div>
-      <div class="flex gap-1.5 flex-wrap">
-        <div class="text-xs font-medium bg-slate-100 text-slate-900 rounded-lg px-3 py-2 border">Tous</div>
-        <div class="text-xs font-medium bg-slate-900 text-slate-300 rounded-lg px-3 py-2 border border-slate-700">TD</div>
-        <div class="text-xs font-medium bg-slate-900 text-slate-300 rounded-lg px-3 py-2 border border-slate-700">TP</div>
-        <div class="text-xs font-medium bg-slate-900 text-slate-300 rounded-lg px-3 py-2 border border-slate-700">CM</div>
-        <div class="text-xs font-medium bg-slate-900 text-slate-300 rounded-lg px-3 py-2 border border-slate-700">Examen</div>
-        <div class="text-xs font-medium bg-slate-900 text-slate-300 rounded-lg px-3 py-2 border border-slate-700">Autre</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ================= APRÈS ================= -->
-  <p class="text-[10px] uppercase tracking-wide text-indigo-400 mb-1.5">Proposition — en-tête compact 2 lignes (~70 px au-dessus du 1er agenda)</p>
+  <!-- ================= EN-TÊTE COMPACT ================= -->
+  <p class="text-[10px] uppercase tracking-wide text-indigo-400 mb-1.5">En-tête compact 2 lignes (~70 px au-dessus du 1er agenda)</p>
   <div class="rounded-2xl border border-indigo-500/40 bg-slate-950 p-2 mb-6">
     <!-- ligne 1 -->
     <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-1.5">
@@ -53,50 +22,51 @@
         <span class="text-[10px] font-normal text-slate-400">· 52 930 créneaux · MAJ 12/11/2026</span>
       </h1>
       <div class="flex items-center gap-1.5">
-        <span class="text-[10px] rounded-full px-2 py-0.5 border bg-emerald-500/15 text-emerald-300 border-emerald-400/40">6 720 créneaux cette semaine</span>
         <span class="text-[10px] font-medium bg-indigo-500 rounded-lg px-2.5 py-1">Flux &amp; sources</span>
       </div>
     </div>
-    <!-- ligne 2 -->
+    <!-- ligne 2 : nav, puis Semaine/Période + barre unique côte à côte -->
     <div class="flex flex-wrap items-center gap-1.5">
       <div class="bg-slate-900 border border-slate-700 rounded-lg w-7 h-7 flex items-center justify-center text-xs">‹</div>
       <div class="bg-slate-900 border border-slate-700 rounded-lg w-7 h-7 flex items-center justify-center text-xs">›</div>
       <span class="text-xs text-slate-300 ml-0.5">16 – 22 nov.</span>
-      <div class="text-[11px] font-medium bg-slate-100 text-slate-900 rounded-lg px-2.5 py-1 border border-slate-100">Semaine</div>
-      <div class="text-[11px] font-medium bg-slate-900 text-slate-300 rounded-lg px-2.5 py-1 border border-slate-700">Période</div>
-      <!-- barre unique avec suggestions ouvertes -->
-      <div class="relative flex-1 min-w-[180px]">
-        <div class="bg-slate-900 border border-slate-700 rounded-xl pl-8 pr-3 py-1.5 text-sm text-slate-100 truncate">opt…</div>
-        <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        <div class="absolute z-30 left-0 right-0 top-full mt-1 rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
-          <div class="px-3 py-1.5 flex items-center gap-2 border-b border-slate-800/60">
-            <span class="text-[9px] uppercase rounded px-1.5 py-0.5 border bg-indigo-500/15 text-indigo-300 border-indigo-400/40">Cours</span>
-            <span class="text-xs text-slate-100">TD Optique</span>
-            <span class="text-[10px] text-slate-500 ml-auto">6 créneaux · MA1</span>
-          </div>
-          <div class="px-3 py-1.5 flex items-center gap-2 border-b border-slate-800/60">
-            <span class="text-[9px] uppercase rounded px-1.5 py-0.5 border bg-indigo-500/15 text-indigo-300 border-indigo-400/40">Cours</span>
-            <span class="text-xs text-slate-100">TP Optique</span>
-            <span class="text-[10px] text-slate-500 ml-auto">3 créneaux · MA1</span>
-          </div>
-          <div class="px-3 py-1.5 flex items-center gap-2 border-b border-slate-800/60">
-            <span class="text-[9px] uppercase rounded px-1.5 py-0.5 border bg-amber-500/15 text-amber-300 border-amber-400/40">Salle</span>
-            <span class="text-xs text-slate-100">C118</span>
-            <span class="text-[10px] text-slate-500 ml-auto">15 créneaux</span>
-          </div>
-          <div class="px-3 py-1.5 flex items-center gap-2 border-b border-slate-800/60">
-            <span class="text-[9px] uppercase rounded px-1.5 py-0.5 border bg-sky-500/15 text-sky-300 border-sky-400/40">Ens</span>
-            <span class="text-xs text-slate-100">Clerc Muriel</span>
-            <span class="text-[10px] text-slate-500 ml-auto">71 créneaux</span>
-          </div>
-          <div class="px-3 py-1.5 flex items-center gap-2">
-            <span class="text-[9px] uppercase rounded px-1.5 py-0.5 border bg-emerald-500/15 text-emerald-300 border-emerald-400/40">Groupe</span>
-            <span class="text-xs text-slate-100">MA1</span>
-            <span class="text-[10px] text-slate-500 ml-auto">52 créneaux</span>
+      <div class="flex flex-wrap items-center gap-1.5 flex-1 min-w-[240px]">
+        <div class="text-[11px] font-medium bg-slate-100 text-slate-900 rounded-lg px-2.5 py-1 border border-slate-100">Semaine</div>
+        <div class="text-[11px] font-medium bg-slate-900 text-slate-300 rounded-lg px-2.5 py-1 border border-slate-700">Période</div>
+        <!-- barre unique avec suggestions ouvertes -->
+        <div class="relative flex-1 min-w-[160px]">
+          <div class="bg-slate-900 border border-slate-700 rounded-xl pl-8 pr-3 py-1.5 text-sm text-slate-100 truncate">opt…</div>
+          <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <div class="absolute z-30 left-0 right-0 top-full mt-1 rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
+            <div class="px-3 py-1.5 flex items-center gap-2 border-b border-slate-800/60">
+              <span class="text-[9px] uppercase rounded px-1.5 py-0.5 border bg-indigo-500/15 text-indigo-300 border-indigo-400/40">Cours</span>
+              <span class="text-xs text-slate-100">TD Optique</span>
+              <span class="text-[10px] text-slate-500 ml-auto">6 créneaux · MA1</span>
+            </div>
+            <div class="px-3 py-1.5 flex items-center gap-2 border-b border-slate-800/60">
+              <span class="text-[9px] uppercase rounded px-1.5 py-0.5 border bg-indigo-500/15 text-indigo-300 border-indigo-400/40">Cours</span>
+              <span class="text-xs text-slate-100">TP Optique</span>
+              <span class="text-[10px] text-slate-500 ml-auto">3 créneaux · MA1</span>
+            </div>
+            <div class="px-3 py-1.5 flex items-center gap-2 border-b border-slate-800/60">
+              <span class="text-[9px] uppercase rounded px-1.5 py-0.5 border bg-amber-500/15 text-amber-300 border-amber-400/40">Salle</span>
+              <span class="text-xs text-slate-100">C118</span>
+              <span class="text-[10px] text-slate-500 ml-auto">15 créneaux</span>
+            </div>
+            <div class="px-3 py-1.5 flex items-center gap-2 border-b border-slate-800/60">
+              <span class="text-[9px] uppercase rounded px-1.5 py-0.5 border bg-sky-500/15 text-sky-300 border-sky-400/40">Ens</span>
+              <span class="text-xs text-slate-100">Clerc Muriel</span>
+              <span class="text-[10px] text-slate-500 ml-auto">71 créneaux</span>
+            </div>
+            <div class="px-3 py-1.5 flex items-center gap-2">
+              <span class="text-[9px] uppercase rounded px-1.5 py-0.5 border bg-emerald-500/15 text-emerald-300 border-emerald-400/40">Groupe</span>
+              <span class="text-xs text-slate-100">MA1</span>
+              <span class="text-[10px] text-slate-500 ml-auto">52 créneaux</span>
+            </div>
           </div>
         </div>
+        <div class="bg-slate-900 border border-slate-700 rounded-xl px-2 py-1.5 text-xs flex items-center gap-1">Type : <span class="text-slate-100 font-medium">Tous</span> ▾</div>
       </div>
-      <div class="bg-slate-900 border border-slate-700 rounded-xl px-2 py-1.5 text-xs flex items-center gap-1">Type : <span class="text-slate-100 font-medium">Tous</span> ▾</div>
     </div>
   </div>
 
@@ -121,6 +91,17 @@
         </span>
         <span class="text-[10px] bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 whitespace-nowrap">⇪ .ics</span>
       </div>
+    </div>
+    <!-- ligne de configuration promo (sans champ de saisie : uniquement des boutons) -->
+    <div class="flex flex-wrap items-center gap-1.5 px-3 py-1.5 border-b border-slate-800/70">
+      <div class="text-[11px] font-semibold rounded-lg px-2.5 py-0.5 border bg-slate-900 text-slate-300 border-slate-700">BUT1</div>
+      <div class="text-[11px] font-semibold rounded-lg px-2.5 py-0.5 border bg-indigo-400 text-slate-900 border-indigo-400">BUT2</div>
+      <div class="text-[11px] font-semibold rounded-lg px-2.5 py-0.5 border bg-slate-900 text-slate-300 border-slate-700">BUT3</div>
+      <span class="text-[10px] uppercase tracking-wide text-slate-500 ml-1">Groupes</span>
+      <div class="text-[11px] font-medium rounded-lg px-2.5 py-0.5 border bg-slate-900 text-slate-300 border-slate-700">Tous</div>
+      <div class="text-[11px] font-medium rounded-lg px-2.5 py-0.5 border bg-indigo-400 text-slate-900 border-indigo-400">MA1</div>
+      <div class="text-[11px] font-medium rounded-lg px-2.5 py-0.5 border bg-slate-900 text-slate-300 border-slate-700">MA2</div>
+      <div class="text-[11px] font-medium rounded-lg px-2.5 py-0.5 border bg-slate-900 text-slate-300 border-slate-700">MB1</div>
     </div>
     <!-- grille -->
     <div class="relative" style="height:462px">
@@ -290,7 +271,7 @@
   </div>
 
   <p class="text-[10px] text-slate-500 mb-2">
-    Sur mobile : les mêmes éléments se répartissent en 2-3 lignes fines (flex-wrap). Le filtre TD/TP/CM/Examen devient un menu compact « Type : Tous ▾ ». Les champs de saisie salle/enseignant dans les agendas disparaissent : tout passe par la barre unique.
+    Sur mobile : les mêmes éléments se répartissent en 2-3 lignes fines (flex-wrap), la barre de recherche reste collée aux boutons Semaine/Période. Le filtre TD/TP/CM/Examen devient un menu compact « Type : Tous ▾ ». Plus aucun champ d'autocomplétion dans les agendas (groupe, enseignant, salle) : tout passe par la barre unique ; dans un agenda promo, les groupes se choisissent avec des boutons uniquement.
   </p>
 
 </div>
