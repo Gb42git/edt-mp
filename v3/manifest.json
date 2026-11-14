@@ -2,14 +2,16 @@
   "name": "EDT Mesures Physiques",
   "short_name": "EDT MP",
   "description": "Emploi du temps Mesures Physiques (IUT Saint-Étienne), source ADE.",
-  "start_url": "./",
-  "scope": "./",
+  "start_url": "/edt-mp/v3/",
+  "scope": "/edt-mp/v3/",
   "display": "standalone",
-  "orientation": "portrait-primary",
+  "orientation": "portrait",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
   "icons": [
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-m-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon-m-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
