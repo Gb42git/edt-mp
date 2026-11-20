@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<!-- Suite 85 : MINI-GATE à la racine /edt-mp/ — le mot de passe est demandé
+     AVANT tout accès à l'app. Décision du 17/11/2026 : pas d'indexation ni de lien
+     suivi vers la version publique — le HTML ne contient AUCUN lien cliquable ;
+     la redirection part uniquement du JS après comparaison de l'empreinte SHA-256
+     de la saisie (le mot de passe n'apparaît pas en clair dans la source).
+     Aucune trace des gates privées ni de contenu chiffré.
+     La version publique reste une protection douce : joignable par URL directe. -->
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0f172a">
+<meta name="robots" content="noindex">
+<title>EDT Mesures Physiques — Accès</title>
+<style>
+  body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh}
+  .card{background:#1e293b;padding:2rem;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.4);max-width:360px;width:90%;text-align:center}
+  h1{margin:0 0 .25rem;font-size:1.25rem}
+  p{margin:.25rem 0 1rem;color:#94a3b8;font-size:.9rem}
+  input{width:100%;box-sizing:border-box;padding:.65rem;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:1rem}
+  button{margin-top:.75rem;width:100%;padding:.65rem;border:0;border-radius:8px;background:#2563eb;color:#fff;font-size:1rem;font-weight:600;cursor:pointer}
+  button:disabled{opacity:.5}
+  .err{color:#f87171;font-size:.85rem;margin-top:.5rem;display:none}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>EDT Mesures Physiques</h1>
+  <p>IUT Saint-Étienne — contenu protégé. Entrez le mot de passe.</p>
+  <form onsubmit="event.preventDefault();tryOpen()">
+    <input id="pw" type="password" placeholder="Mot de passe" autocomplete="current-password" autofocus>
+    <button id="go" type="submit">Ouvrir l'emploi du temps</button>
+  </form>
+  <div class="err" id="err">Mot de passe incorrect.</div>
+</div>
+<script>
+// Empreinte SHA-256 du mot de passe (jamais stocké ni en clair dans la page).
+const H="efcc859903e75c54f5a049216000431d280fa45e48630f2e0626049393ace6d1";
+async function tryOpen(){
+  const btn=document.getElementById('go'),err=document.getElementById('err');
+  btn.disabled=true;btn.textContent='Vérification…';err.style.display='none';
+  try{
+    const pw=document.getElementById('pw').value;
+    const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(pw));
+    const hex=[...new Uint8Array(d)].map((b)=>b.toString(16).padStart(2,'0')).join('');
+    if(hex===H){location.replace('/edt-mp/v2/');return;}
+    err.style.display='block';
+  }catch(x){err.style.display='block';}
+  btn.disabled=false;btn.textContent='Ouvrir l\'emploi du temps';
+}
+</script>
+</body>
+</html>
