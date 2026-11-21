@@ -7,7 +7,17 @@
 const CACHE = 'edt-mp-v2';
 const NET_TIMEOUT = 3000;
 self.addEventListener('install', (e) => self.skipWaiting());
-self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+self.addEventListener('activate', (e) => e.waitUntil((async () => {
+  // Suite 106 : purge des ANCIENNES estampilles de la même variante (v4 estampillé à chaque
+  // publication). Sans ça, caches.match() trouve l'ancienne gate d'abord (ordre de création)
+  // et le repli hors ligne/réseau lent servait la publication PRÉCÉDENTE ; et un cache de
+  // ~2,2 Mo s'accumulait par publication. Filtre sur le préfixe de la variante : les caches
+  // v2/v3 (noms constants) et des autres variantes ne sont JAMAIS touchés.
+  const PREFIX = String(CACHE).replace(/-\d{8}-\d+$/, '');
+  const keys = await caches.keys();
+  await Promise.all(keys.filter((k) => k !== CACHE && k.startsWith(PREFIX)).map((k) => caches.delete(k)));
+  await self.clients.claim();
+})()));
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   e.respondWith((async () => {
