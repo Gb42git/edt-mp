@@ -1,7 +1,7 @@
 name: assemble-v4
 on:
   push:
-    paths: ['.tmp-v4-a', '.tmp-v4-b']
+    paths: ['.tmp-v4-a', '.tmp-v4-b', '.github/workflows/assemble-v4.yml']
   workflow_dispatch:
 permissions:
   contents: write
