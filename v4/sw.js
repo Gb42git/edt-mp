@@ -4,7 +4,7 @@
 //   réseau continue en arrière-plan pour mettre le cache à jour (MAJ préparée) ;
 // - hors ligne : rejet réseau immédiat → cache.
 // Les données sont publiées la nuit : la version en cache reste de toute façon exploitable.
-const CACHE = 'edt-mp-v4-20261122-1416';
+const CACHE = 'edt-mp-v4-20261122-1503';
 const NET_TIMEOUT = 3000;
 self.addEventListener('install', (e) => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil((async () => {
