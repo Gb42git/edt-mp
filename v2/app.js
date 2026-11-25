@@ -2885,6 +2885,12 @@ function App() {
     try {
       if (typeof document !== "undefined" && document.documentElement) document.documentElement.classList.toggle("light", !!light134);
     } catch (e) {}
+    // SUITE 139 : le meta theme-color est piloté par l'APP (indépendant du réglage du
+    // téléphone) — #0f172a par défaut (écran d'accès), #eef2f7 quand le clair est actif.
+    try {
+      var tc139 = typeof document !== "undefined" && document.querySelector ? document.querySelector('meta[name="theme-color"]') : null;
+      if (tc139) tc139.setAttribute("content", light134 ? "#eef2f7" : "#0f172a");
+    } catch (e) {}
   }, [light134]);
   // Filtres des agendas virtuels : par défaut seuls les CM/TD/TP (le plus critique sans
   // enseignant réel) sont affichés ; Devoirs et Autres se rallument d'un clic.
