@@ -12,20 +12,23 @@
 <link rel="manifest" href="manifest.json">
 <title>EDT Mesures Physiques — Accès</title>
 <style>
-  body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:#0f172a;color:#e2e8f0}
-  /* SUITE 138b : flexion centrée réservée à l'ÉCRAN D'ACCÈS (body.locked) — l'ancienne
-     règle sur body seul persistait après déverrouillage et centrait/rétrécissait l'app
-     (~80 % de largeur, décalée vers le bas ; l'ancienne gate livrait body{margin:0}). */
-  body.locked{display:flex;align-items:center;justify-content:center;min-height:100vh}
-  .card{background:#1e293b;padding:2rem;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.4);max-width:360px;width:90%}
-  h1{margin:0 0 .25rem;font-size:1.25rem}
-  p{margin:.25rem 0 1rem;color:#94a3b8;font-size:.9rem}
-  input{width:100%;box-sizing:border-box;padding:.65rem;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:1rem}
-  button{margin-top:.75rem;width:100%;padding:.65rem;border:0;border-radius:8px;background:#2563eb;color:#fff;font-size:1rem;font-weight:600;cursor:pointer}
-  button:disabled{opacity:.5}
-  label.mem{display:flex;align-items:center;gap:.45rem;margin-top:.6rem;font-size:.85rem;color:#94a3b8;cursor:pointer;user-select:none}
-  label.mem input{width:auto}
-  .err{color:#f87171;font-size:.85rem;margin-top:.5rem;display:none}
+  /* SUITE 138c : TOUTES les règles de l'écran d'accès sont SCOPÉES sous #lock — l'ancienne
+     gate déverrouillait par document.write (remplacement du document), la feuille de
+     l'écran d'accès ne cohabitait jamais avec l'app ; en fichiers clairs ELLE COHABITE,
+     et les sélecteurs nus (button 100 %, input, h1, p, label) fuientaient sur l'app
+     (bouton Rafr. pleine largeur, onglets gonflés — capture du 25/11 23h43). */
+  body{margin:0;background:#0f172a}
+  /* SUITE 138b : flexion centrée réservée à l'écrAN D'ACCÈS (body.locked), retirée au boot. */
+  body.locked{display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:system-ui,-apple-system,sans-serif;color:#e2e8f0}
+  #lock .card{background:#1e293b;padding:2rem;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.4);max-width:360px;width:90%}
+  #lock h1{margin:0 0 .25rem;font-size:1.25rem}
+  #lock p{margin:.25rem 0 1rem;color:#94a3b8;font-size:.9rem}
+  #lock input{width:100%;box-sizing:border-box;padding:.65rem;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:1rem}
+  #lock button{margin-top:.75rem;width:100%;padding:.65rem;border:0;border-radius:8px;background:#2563eb;color:#fff;font-size:1rem;font-weight:600;cursor:pointer}
+  #lock button:disabled{opacity:.5}
+  #lock label.mem{display:flex;align-items:center;gap:.45rem;margin-top:.6rem;font-size:.85rem;color:#94a3b8;cursor:pointer;user-select:none}
+  #lock label.mem input{width:auto}
+  #lock .err{color:#f87171;font-size:.85rem;margin-top:.5rem;display:none}
 </style>
 </head>
 <body class="locked">
