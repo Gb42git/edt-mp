@@ -12,7 +12,11 @@
 <link rel="manifest" href="manifest.json">
 <title>EDT Mesures Physiques — Accès</title>
 <style>
-  body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh}
+  body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:#0f172a;color:#e2e8f0}
+  /* SUITE 138b : flexion centrée réservée à l'ÉCRAN D'ACCÈS (body.locked) — l'ancienne
+     règle sur body seul persistait après déverrouillage et centrait/rétrécissait l'app
+     (~80 % de largeur, décalée vers le bas ; l'ancienne gate livrait body{margin:0}). */
+  body.locked{display:flex;align-items:center;justify-content:center;min-height:100vh}
   .card{background:#1e293b;padding:2rem;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.4);max-width:360px;width:90%}
   h1{margin:0 0 .25rem;font-size:1.25rem}
   p{margin:.25rem 0 1rem;color:#94a3b8;font-size:.9rem}
@@ -24,7 +28,7 @@
   .err{color:#f87171;font-size:.85rem;margin-top:.5rem;display:none}
 </style>
 </head>
-<body>
+<body class="locked">
 <div id="root" style="display:none"></div>
 <div id="lock">
 <div class="card">
@@ -54,6 +58,7 @@ let booted=false;
 async function boot(){
   if(booted)return;booted=true;
   document.title=APP_TITLE;
+  document.body.classList.remove('locked'); // SUITE 138b : libérer body de la flexion de l'écran d'accès
   // Tailwind : non bloquant (hors ligne, le SW sert la copie opaque en cache) ;
   // React/ReactDOM/app.js sont requis — chargés DANS l'ordre avant d'afficher.
   loadScript('https://cdn.tailwindcss.com').catch(()=>{});
