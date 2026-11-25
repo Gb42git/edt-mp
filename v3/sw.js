@@ -1,3 +1,4 @@
+
 // Service worker EDT MP v3 — network-first AVEC TIMEOUT (suite 64) :
 // - réseau normal : le serveur prime (version fraîche), comme avant ;
 // - réseau lent : après 3 s d'attente, le cache est servi (affichage immédiat) et le
