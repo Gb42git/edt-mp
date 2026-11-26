@@ -4,7 +4,7 @@
 //   réseau continue en arrière-plan pour mettre le cache à jour (MAJ préparée) ;
 // - hors ligne : rejet réseau immédiat → cache.
 // Les données sont publiées la nuit : la version en cache reste de toute façon exploitable.
-const CACHE = 'edt-mp-v3-20261126-1932';
+const CACHE = 'edt-mp-v3-20261126-2021';
 const NET_TIMEOUT = 3000;
 // SUITE 128 : page hors ligne lisible (mode avion avec cache vide — REMPLACE le texte brut
 // « Hors ligne » sur fond noir). Uniquement pour les navigations ; la gate et les assets
@@ -19,7 +19,7 @@ self.addEventListener('install', (e) => e.waitUntil((async () => {
   // contrairement à cache.addAll) et n'écrase jamais une entrée déjà fraîche.
   try {
     const c = await caches.open(CACHE);
-    const PRELOAD = ['./', './manifest.json', './app-20261126-2015.js', './vendor/react.min.js', './vendor/reactdom.min.js', './icon-192.png', './icon-512.png', './icon-m-192.png', './icon-m-512.png'];
+    const PRELOAD = ['./', './manifest.json', './app-20261126-2021.js', './vendor/react.min.js', './vendor/reactdom.min.js', './icon-192.png', './icon-512.png', './icon-m-192.png', './icon-m-512.png'];
     await Promise.all(PRELOAD.map(async (u) => {
       if (await c.match(u)) return;
       try {
