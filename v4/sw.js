@@ -4,7 +4,7 @@
 //   réseau continue en arrière-plan pour mettre le cache à jour (MAJ préparée) ;
 // - hors ligne : rejet réseau immédiat → cache.
 // Les données sont publiées la nuit : la version en cache reste de toute façon exploitable.
-const CACHE = 'edt-mp-v4-20261126-1657';
+const CACHE = 'edt-mp-v4-20261126-1714';
 const NET_TIMEOUT = 3000;
 // SUITE 128 : page hors ligne lisible (mode avion avec cache vide — REMPLACE le texte brut
 // « Hors ligne » sur fond noir). Uniquement pour les navigations ; la gate et les assets

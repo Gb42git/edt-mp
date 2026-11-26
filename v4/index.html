@@ -61,13 +61,20 @@ let booted=false;
 async function boot(){
   if(booted)return;booted=true;
   document.title=APP_TITLE;
-  document.body.classList.remove('locked'); // SUITE 138b : libérer body de la flexion de l'écran d'accès
+  // SUITE 141f : le portail garde son centrage et son thème (body.locked, 138b/138c)
+  // JUSQU'AU CHARGEMENT RÉUSSI de React/ReactDOM/app — avant, la classe était retirée
+  // AVANT les awaits : sur réseau lent (bundle ~458 Ko) restait une fenêtre de secondes
+  // où le portail s'affichait DÉVERROUILLÉ (carte en haut à gauche, preflight Tailwind
+  // par-dessus) ; et si un script échouait, l'état cassé PERSISTAIT. Ici : on ne
+  // déverrouille qu'une fois tout prêt ; en cas d'échec le portail reste intact et le
+  // bouton « Déverrouiller » revient (catch d'unlock).
   // Tailwind : non bloquant (hors ligne, le SW sert la copie opaque en cache) ;
   // React/ReactDOM/app.js sont requis — chargés DANS l'ordre avant d'afficher.
   loadScript('https://cdn.tailwindcss.com').catch(()=>{});
   await loadScript('vendor/react.min.js');
   await loadScript('vendor/reactdom.min.js');
   await loadScript("app-20261126-1935.js");
+  document.body.classList.remove('locked'); // SUITE 138b/141f : libérer la flexion APRÈS le chargement réussi
   document.getElementById('lock').style.display='none';
   document.getElementById('root').style.display='';
 }
