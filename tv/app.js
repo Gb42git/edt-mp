@@ -195,7 +195,7 @@ const PROMOS = {
     defaultCols: ["ALT1", "ALT2"]
   },
   "MP-3A-MAE": {
-    label: "BUT MAE",
+    label: "BUT3 MAE",
     short: "B3mae",
     tree: {
       "MP-3A-MAE": ["INI", "ALT", "ALT1", "ALT2"]
@@ -2440,9 +2440,9 @@ function Kiosk132({
         style: {
           flexGrow: 1,
           minWidth: 0,
-          fontSize: 13,
-          fontWeight: 700,
-          color: "#94a3b8"
+          fontSize: 21,
+          fontWeight: 800,
+          color: "#e2e8f0"
         }
       }, grpDisp(q.p, g)))));
     })), /*#__PURE__*/React.createElement("div", {
