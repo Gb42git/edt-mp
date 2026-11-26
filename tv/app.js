@@ -3122,6 +3122,15 @@ function App() {
     store("edt2-virtf", n);
     return n;
   });
+  // SUITE 145 : bandeau des groupes (boutons promo + chips) présent sur TOUS les agendas,
+  // même enseignant/salle/cours — le bouton « Étudiant » de la barre de recherche devient
+  // sa commande de repli. État persisté edt2-grp-open, DÉPLIÉ par défaut ; cliquer une
+  // promo ou un groupe depuis un agenda non-Étudiant le convertit en agenda Étudiant.
+  const [grpOpen145, setGrpOpen145] = useState(() => load("edt2-grp-open") !== 0);
+  const toggleGrp145 = () => {
+    setGrpOpen145(v => !v);
+    store("edt2-grp-open", grpOpen145 ? 0 : 1);
+  };
   // Sélecteur de groupes (Étudiant) : panneau repliable, une seule ligne en replié.
   // (plus de repli « Choisir des groupes » : pastilles toujours visibles, une rangée compacte)
   // Suite 81 : plus AUCUN défilement automatique au changement de vue (l'utilisateur
@@ -5989,14 +5998,6 @@ function App() {
     const shownCount = data.shown.length;
     const nowD = new Date();
     const busyNow = slot.kind === "room" && slot.room && data.shown.concat(data.shown).some(e => sameDay(e.start, nowD) && e.start <= nowD && e.end > nowD);
-    const kindBtn = (kind, label) => /*#__PURE__*/React.createElement("button", {
-      onClick: () => updSlot(slot.id, {
-        kind,
-        collapsed: false
-      }),
-      title: "Passer cet agenda en " + label,
-      className: "text-[10px] font-semibold rounded px-2 py-1 transition " + (slot.kind === kind ? "bg-indigo-400 text-slate-900" : "text-slate-400 hover:text-slate-100")
-    }, label);
     const sugg = suggForSlot(slot);
     return /*#__PURE__*/React.createElement("div", {
       key: slot.id,
@@ -6071,9 +6072,11 @@ function App() {
       className: "text-slate-500 hover:text-rose-300 text-sm leading-none px-1"
     }, "✕"))), /*#__PURE__*/React.createElement("div", {
       className: "flex items-center gap-1.5 px-3 py-1.5 border-b border-slate-800/70"
-    }, /*#__PURE__*/React.createElement("div", {
-      className: "flex rounded-lg border border-slate-700 bg-slate-950 overflow-hidden shrink-0"
-    }, kindBtn("promo", "Étudiant")), /*#__PURE__*/React.createElement("div", {
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: toggleGrp145,
+      title: grpOpen145 ? "Replier le bandeau des groupes" : "Déplier le bandeau des groupes (promos et groupes cliquables ; un clic convertit cet agenda en agenda Étudiant)",
+      className: "text-[10px] font-semibold rounded-lg px-2 py-1 transition border shrink-0 " + (grpOpen145 ? "bg-indigo-400 text-slate-900 border-indigo-400" : "bg-slate-950 text-slate-400 border-slate-700 hover:border-slate-500")
+    }, "Étudiant ", grpOpen145 ? "▾" : "▸"), /*#__PURE__*/React.createElement("div", {
       className: "relative flex-1 min-w-[140px]"
     }, /*#__PURE__*/React.createElement("svg", {
       className: "absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 z-10",
@@ -6128,7 +6131,7 @@ function App() {
       title: s.kind === "enseignant" ? "⚠ Enseignant virtuel" : "⚠ Salle virtuelle"
     }, " ⚠") : null), /*#__PURE__*/React.createElement("span", {
       className: "text-[10px] text-slate-500 ml-auto whitespace-nowrap"
-    }, s.hint)))))), !slot.collapsed && /*#__PURE__*/React.createElement(React.Fragment, null, slot.kind === "promo" && /*#__PURE__*/React.createElement("div", {
+    }, s.hint)))))), !slot.collapsed && /*#__PURE__*/React.createElement(React.Fragment, null, grpOpen145 && PROMOS[slot.promo] && /*#__PURE__*/React.createElement("div", {
       className: "px-3 py-2.5 border-b border-slate-800/70"
     }, /*#__PURE__*/React.createElement("div", {
       className: "flex flex-wrap items-center gap-1 mb-1"
@@ -6142,6 +6145,7 @@ function App() {
       className: "flex items-center gap-0.5"
     }, /*#__PURE__*/React.createElement("button", {
       onClick: () => updSlot(slot.id, {
+        kind: "promo",
         promo: p,
         groups: PROMOS[p].defaultCols.includes("MA1") ? ["MA1"] : []
       }),
@@ -6162,6 +6166,7 @@ function App() {
       className: "flex flex-wrap items-center gap-1"
     }, /*#__PURE__*/React.createElement("button", {
       onClick: () => updSlot(slot.id, {
+        kind: "promo",
         groups: []
       }),
       title: "Tous les groupes",
@@ -6190,6 +6195,7 @@ function App() {
           className: "flex items-center gap-0.5"
         }, /*#__PURE__*/React.createElement("button", {
           onClick: () => updSlot(slot.id, {
+            kind: "promo",
             groups: on ? slot.groups.filter(x => !gs.includes(x)) : [...new Set([...slot.groups, ...gs])]
           }),
           className: "font-medium rounded-lg px-1.5 py-1 border transition text-[11px] " + (on ? "bg-indigo-400 text-slate-900 border-indigo-400" : "bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500")
