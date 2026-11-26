@@ -2738,43 +2738,58 @@ function Kiosk132({
             padding: "0 4px",
             borderRadius: 4
           };
-          const tSt = isNow ? "clamp(19px,16cqh,24px)" : T >= 44 ? "clamp(15px,14cqh,19px)" : "clamp(12px,8cqh,15px)";
-          const title = tvAbbr(typeTitle(e.summary, tB === "TP" && e.end - e.start >= 2 * 36e5 ? null : tB, true));
-          return /*#__PURE__*/React.createElement("div", {
-            className: "flex items-center justify-center leading-none " + (T >= 44 ? "gap-1.5 " : "gap-1 ") + (T < 44 ? "whitespace-nowrap " : "")
+          const badges = /*#__PURE__*/React.createElement("span", {
+            className: "inline-flex items-center gap-1 leading-none"
           }, tB && /*#__PURE__*/React.createElement("span", {
-            className: "flex-none font-bold text-slate-900 bg-slate-100 rounded",
+            className: "font-bold text-slate-900 bg-slate-100 rounded",
             style: bSt
           }, tB), serB && /*#__PURE__*/React.createElement("span", {
-            className: "flex-none font-bold text-slate-900 bg-slate-100 rounded",
+            className: "font-bold text-slate-900 bg-slate-100 rounded",
             style: bSt
-          }, serB.n + "/" + serB.N), /*#__PURE__*/React.createElement("span", {
+          }, serB.n + "/" + serB.N));
+          const title = tvAbbr(typeTitle(e.summary, tB === "TP" && e.end - e.start >= 2 * 36e5 ? null : tB, true));
+          if (T < 44) return /*#__PURE__*/React.createElement("div", {
+            className: "flex items-center justify-center gap-1 leading-none whitespace-nowrap"
+          }, /*#__PURE__*/React.createElement("span", {
             className: "font-semibold truncate min-w-0",
             style: {
-              fontSize: tSt
+              fontSize: "clamp(12px,8cqh,15px)"
             }
-          }, title), T >= 44 && /*#__PURE__*/React.createElement("span", {
+          }, title), /*#__PURE__*/React.createElement("span", {
             className: "flex-none opacity-70",
             style: {
-              fontSize: isNow ? "clamp(16px,11cqh,20px)" : "clamp(11px,8cqh,14px)"
+              fontSize: "clamp(11px,8cqh,14px)"
             }
-          }, "\u23F0 " + fmtHM(e.start) + "–" + fmtHM(e.end)), T < 44 && e.location && /*#__PURE__*/React.createElement("span", {
+          }, "\u23F0 " + fmtHM(e.start) + "–" + fmtHM(e.end)), e.location && /*#__PURE__*/React.createElement("span", {
             className: "flex-none font-black text-yellow-300",
             style: {
               fontSize: "clamp(11px,8cqh,15px)"
             }
-          }, e.location));
-        })(), T >= 44 && e.location && /*#__PURE__*/React.createElement("div", {
-          className: "font-black text-yellow-300 leading-tight " + (T < 76 ? "line-clamp-2" : "truncate"),
-          style: {
-            fontSize: isNow ? "clamp(26px,15cqh,34px)" : "clamp(22px,13cqh,28px)"
-          }
-        }, e.location), (isNow || T >= 76) && e.teacher && /*#__PURE__*/React.createElement("div", {
-          className: (isNow ? "" : "opacity-70 ") + "leading-tight truncate",
-          style: {
-            fontSize: isNow ? "clamp(15px,10cqh,19px)" : "clamp(13px,9cqh,17px)"
-          }
-        }, e.teacher));
+          }, e.location), badges);
+          return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+            className: "font-semibold leading-tight line-clamp-2",
+            style: {
+              fontSize: isNow ? "clamp(19px,16cqh,24px)" : "clamp(15px,14cqh,19px)"
+            }
+          }, title), /*#__PURE__*/React.createElement("div", {
+            className: "leading-tight",
+            style: {
+              fontSize: isNow ? "clamp(16px,11cqh,20px)" : "clamp(14px,10cqh,17px)"
+            }
+          }, "\u23F0 " + fmtHM(e.start) + "–" + fmtHM(e.end)), e.location && /*#__PURE__*/React.createElement("div", {
+            className: "font-black text-yellow-300 leading-tight " + (T < 76 ? "line-clamp-2" : "truncate"),
+            style: {
+              fontSize: isNow ? "clamp(26px,15cqh,34px)" : "clamp(22px,13cqh,28px)"
+            }
+          }, e.location), (isNow || T >= 76) && e.teacher && /*#__PURE__*/React.createElement("div", {
+            className: (isNow ? "" : "opacity-70 ") + "leading-tight truncate",
+            style: {
+              fontSize: isNow ? "clamp(15px,10cqh,19px)" : "clamp(13px,9cqh,17px)"
+            }
+          }, e.teacher), /*#__PURE__*/React.createElement("div", {
+            className: "mx-auto w-fit"
+          }, badges));
+        })());
       }), tvdiff143.on && tvdiff143.ghosts.filter(gh => gh.p === q.p && sameDay(gh.start, z.day) && (k132.pm ? gh.start.getHours() * 60 + gh.start.getMinutes() >= TV_SPLIT : gh.start.getHours() * 60 + gh.start.getMinutes() < TV_SPLIT)).map((gh, gi) => {
         const gLeaves143 = tvGhostLeaves143(gh.gs, q.leaves);
         let gc0 = q.leaves.indexOf(gLeaves143[0]);
@@ -2840,45 +2855,7 @@ function Kiosk132({
     }
   }, "Dpt ", /*#__PURE__*/React.createElement("span", {
     className: "text-indigo-400"
-  }, "MP"), " — IUT St-Étienne"), (() => {
-    const errs = feedErrs && feedErrs.length;
-    const stale = !busy && lastSync && nowT.getTime() - new Date(lastSync).getTime() > 3600e3;
-    const red = !busy && !!errs;
-    const amber = !busy && !errs && stale;
-    const cls134 = red ? "bg-red-500/25 border border-red-400/70 text-red-300 rounded-lg px-2 " : amber ? "bg-amber-500/25 border border-amber-400/70 text-amber-300 rounded-lg px-2 " : "bg-emerald-500/25 border border-emerald-400/70 text-emerald-300 rounded-lg px-2 ";
-    const msg = red ? "⚠ erreur de synchro, dernière à : " : amber ? "⚠ dernière synchro à : " : "✓ Données synchronisées à : ";
-    const tip = red ? "⚠ Erreur de synchro — dernières données affichées de " + (lastSync ? fmtHM(lastSync) : "—") + " ; prévenir le SI si ça persiste" : amber ? "⚠ Données non rafraîchies depuis plus d'une heure (dernière synchro : " + (lastSync ? fmtHM(lastSync) : "—") + ") ; prévenir le SI si ça persiste" : "Dernière synchronisation des flux ADE — vert si ok, jaune (>1 h sans rafraîchissement) ou rouge (erreur de synchro)";
-    return /*#__PURE__*/React.createElement("span", {
-      className: cls134 + "ml-auto font-extrabold tabular-nums",
-      style: {
-        fontSize: 20
-      },
-      title: tip
-    }, busy ? "Synchronisation…" : !lastSync ? "chargement…" : red || amber ? /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 22
-      }
-    }, msg + fmtHM(lastSync)) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", null, msg), /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 40
-      }
-    }, fmtHM(lastSync))));
-  })(), /*#__PURE__*/React.createElement("span", {
-    className: "text-slate-400",
-    style: {
-      fontSize: 20
-    }
-  }, "Heure actuelle"), /*#__PURE__*/React.createElement("span", {
-    className: "font-extrabold text-sky-300 tabular-nums",
-    style: {
-      fontSize: 40
-    }
-  }, String(nowT.getHours()).padStart(2, "0") + ":" + String(nowT.getMinutes()).padStart(2, "0"))), /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center gap-4 px-7",
-    style: {
-      height: 38
-    }
-  }, !k132.empty && /*#__PURE__*/React.createElement("span", {
+  }, "MP"), " — IUT St-Étienne"), !k132.empty && /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 28
     },
@@ -2926,8 +2903,46 @@ function Kiosk132({
     style: {
       fontSize: 15
     }
-  }, "prochain jour avec créneaux"), /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center gap-1 select-none",
+  }, "prochain jour avec créneaux"), (() => {
+    const errs = feedErrs && feedErrs.length;
+    const stale = !busy && lastSync && nowT.getTime() - new Date(lastSync).getTime() > 3600e3;
+    const red = !busy && !!errs;
+    const amber = !busy && !errs && stale;
+    const cls134 = red ? "bg-red-500/25 border border-red-400/70 text-red-300 rounded-lg px-2 " : amber ? "bg-amber-500/25 border border-amber-400/70 text-amber-300 rounded-lg px-2 " : "bg-emerald-500/25 border border-emerald-400/70 text-emerald-300 rounded-lg px-2 ";
+    const msg = red ? "⚠ erreur de synchro, dernière à : " : amber ? "⚠ dernière synchro à : " : "✓ Données synchronisées à : ";
+    const tip = red ? "⚠ Erreur de synchro — dernières données affichées de " + (lastSync ? fmtHM(lastSync) : "—") + " ; prévenir le SI si ça persiste" : amber ? "⚠ Données non rafraîchies depuis plus d'une heure (dernière synchro : " + (lastSync ? fmtHM(lastSync) : "—") + ") ; prévenir le SI si ça persiste" : "Dernière synchronisation des flux ADE — vert si ok, jaune (>1 h sans rafraîchissement) ou rouge (erreur de synchro)";
+    return /*#__PURE__*/React.createElement("span", {
+      className: cls134 + "ml-auto font-extrabold tabular-nums inline-flex items-center gap-1.5",
+      style: {
+        fontSize: 20
+      },
+      title: tip
+    }, busy ? "Synchronisation…" : !lastSync ? "chargement…" : red || amber ? /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 22
+      }
+    }, msg + fmtHM(lastSync)) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", null, msg), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 40
+      }
+    }, fmtHM(lastSync))));
+  })(), /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-400",
+    style: {
+      fontSize: 20
+    }
+  }, "Heure actuelle"), /*#__PURE__*/React.createElement("span", {
+    className: "font-extrabold text-sky-300 tabular-nums",
+    style: {
+      fontSize: 40
+    }
+  }, String(nowT.getHours()).padStart(2, "0") + ":" + String(nowT.getMinutes()).padStart(2, "0"))), /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-4 px-7",
+    style: {
+      height: 38
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-1 select-none ml-auto",
     style: {
       flex: "none"
     }
