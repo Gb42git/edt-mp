@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Maquette 141e — infos multicolonnes dans les cases XL</title>
+<style>
+  :root { --fam1:#059669; --fam1bg:rgba(5,150,105,.16); --exam:#7c3aed; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:#0f172a; color:#f1f5f9; padding:12px; }
+  h1 { font-size:17px; margin:6px 0 2px; }
+  .note { font-size:12px; color:#94a3b8; line-height:1.5; margin:0 0 10px; }
+  .toggle { position:fixed; top:10px; right:10px; z-index:10; background:#1e293b; color:#f8fafc; border:1px solid #475569; border-radius:8px; padding:7px 12px; font-size:13px; font-weight:600; cursor:pointer; }
+  .pane { border:1px solid #334155; border-radius:12px; background:#020617; padding:10px; margin-bottom:14px; }
+  .pane h2 { font-size:12px; font-weight:700; color:#93c5fd; margin:0 0 6px; text-transform:uppercase; letter-spacing:.04em; }
+  .headers { display:flex; margin-bottom:2px; }
+  .headers .h { flex:1 1 0; text-align:center; font-size:9px; font-weight:800; padding:3px 1px; border-left:1px solid rgba(148,163,184,.25); color:#34d399; }
+  .grid { position:relative; height:640px; margin-left:30px; border-left:1px solid rgba(148,163,184,.25); }
+  .grid .hour { position:absolute; left:-30px; width:26px; text-align:right; font-size:9px; color:#64748b; }
+  .grid .vline { position:absolute; top:0; bottom:0; border-left:1px solid rgba(148,163,184,.13); }
+  .grid .hline { position:absolute; left:0; right:0; border-top:1px solid rgba(148,163,184,.13); }
+  .case { position:absolute; border-radius:7px; padding:4px 6px; overflow:hidden; border:1.5px solid var(--fam1); background:var(--fam1bg); container-type:size; }
+  .case.exam { border-color:var(--exam); border-width:2.5px 2.5px 2.5px 4px; background:rgba(124,58,237,.10); }
+  .badge { display:inline-block; font-size:8.5px; font-weight:800; color:#0f172a; background:#e2e8f0; border-radius:4px; padding:0 4px; margin-bottom:1px; }
+  .titre { font-size:11px; font-weight:600; line-height:1.22; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .infos div { font-size:10px; line-height:1.3; margin-top:1px; }
+  .infos .hor { opacity:.85; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .infos .sub { opacity:.7; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+
+  /* ---------- 141d (actuel) : pile verticale ; XL = titre gauche / infos alignées DROITE ---------- */
+  .d141d .case { display:block; }
+  @container (min-width:230px) {
+    .d141d .case { display:flex; gap:12px; justify-content:center; align-items:flex-start; }
+    .d141d .titre { flex:0 1 auto; min-width:0; max-width:55%; -webkit-line-clamp:3; }
+    .d141d .infos { flex:0 1 auto; min-width:0; max-width:58%; text-align:right; }
+  }
+
+  /* ---------- 141e (proposé) : XL = titre gauche / INFOS MULTICOLONNES alignées GAUCHE ----------
+     columns: <largeur-idéale> auto → le navigateur calcule N colonnes au redimensionnement
+     (3 → 2 → 1 en temps réel) ; column-fill:auto remplit la hauteur D'ABORD puis débordement
+     en colonnes suivantes ; trop-plein rogné au bord (overflow:hidden) ; aligné à GAUCHE :
+     ce qui reste visible est toujours le DÉBUT des infos. */
+  .d141e .case { display:block; }
+  @container (min-width:230px) {
+    .d141e .case { display:flex; gap:12px; justify-content:flex-start; align-items:flex-start; }
+    .d141e .titre { flex:0 0 auto; min-width:0; max-width:38%; -webkit-line-clamp:3; }
+    .d141e .infos { flex:1 1 auto; min-width:0; height:100%; columns:88px auto; column-fill:auto;
+                    column-gap:12px; column-rule:1px solid rgba(148,163,184,.18); text-align:left; }
+    .d141e .infos div { break-inside:avoid; }
+  }
+</style>
+</head>
+<body class="d141e">
+<button class="toggle" id="tg">Vue : 141e (multicol)</button>
+<h1>Maquette 141e — infos en multicolonnes dans les cases XL (large mais peu haute)</h1>
+<p class="note">Semaine fictive BUT1 (lundi de référence, jeudi volontairement absent des données vedettes). Basculer avec le bouton en haut à droite : <b>141d</b> = production actuelle (XL : infos empilées alignées à droite) · <b>141e</b> = infos en flux multicolonnes alignées à gauche : le navigateur calcule le nombre de colonnes (3 → 2 → 1) à la volée au redimensionnement de la fenêtre ; si la case est trop basse, le trop-plein est rogné au bord inférieur (pas d'ellipsis), le début des infos toujours visible. Réduisez la fenêtre pour voir les colonnes repartir.</p>
+<div id="panes"></div>
+<script>
+const F = ["A1-6","A7-12","TA1","MA1","MB4"]; // feuilles BUT1
+const evs = [
+  // LUNDI (jour de référence)
+  { d:0, s:480, e:540, c0:0, c1:4, t:"Maths 2", r:"Amphi Jaules", n:"CLERC MURIEL", b:"CM" },
+  { d:0, s:540, e:720, c0:0, c1:0, t:"TP Elec", r:"C115", n:"PAYET GERVY", b:"TP" },
+  { d:0, s:540, e:720, c0:1, c1:1, t:"Info Labview", r:"B412", n:"BONNEFOI LAURENT", b:"TP" },
+  { d:0, s:540, e:720, c0:2, c1:2, t:"TD Chimie", r:"B104", n:"VOCANSON FRANCIS", b:"TD" },
+  { d:0, s:540, e:720, c0:3, c1:3, t:"TP Optique", r:"D204", n:"BRUNEL PASCAL", b:"TP" },
+  { d:0, s:810, e:870, c0:0, c1:4, t:"Thermométrie", r:"Amphi Jaules", n:"PICHON OLIVIER", b:"CM" },
+  { d:0, s:870, e:960, c0:0, c1:0, t:"TD Systèmes électriques 2", r:"B302", n:"MARRAKCHI GHANEM · PRIEUR ÉLODIE", b:"TD" },
+  { d:0, s:870, e:960, c0:2, c1:2, t:"TD Méca 1", r:"B104", n:"VERON YOANN", b:"TD" },
+  { d:0, s:960, e:1050, c0:1, c1:1, t:"TD Maths 2", r:"B302", n:"CLERC MURIEL", b:"TD" },
+  { d:0, s:960, e:1050, c0:3, c1:3, t:"TD Anglais", r:"D101", n:"DANIERE GAELLE · PERRIN SOPHIE", b:"TD" },
+  { d:0, s:870, e:960, c0:4, c1:4, t:"TD Thermo", r:"C103", n:"MARCONNET LAURENT", b:"TD" },
+  { d:0, s:960, e:1050, c0:4, c1:4, t:"TP Matériaux", r:"D204", n:"SOUDERES ISABELLE", b:"TP" },
+  // MARDI
+  { d:1, s:480, e:600, c0:0, c1:0, t:"TD Outils Scientifiques", r:"B302", n:"MARCONNET LAURENT", b:"TD" },
+  { d:1, s:480, e:600, c0:1, c1:1, t:"TD Atomistique", r:"B104", n:"VOCANSON FRANCIS", b:"TD" },
+  { d:1, s:600, e:810, c0:0, c1:4, t:"Devoir Thermodynamique N°2", r:"F247 · D302 · C101", n:"MARCONNET LAURENT", b:"EX", ex:1 },
+  // MERCREDI
+  { d:2, s:540, e:810, c0:0, c1:0, t:"TP Conversion d'énergie", r:"C103", n:"ALLAIN GUILLAUME · BERNARD CHRISTINE", b:"TP" },
+  { d:2, s:540, e:810, c0:1, c1:1, t:"TP Elec 2", r:"C115", n:"PAYET GERVY", b:"TP" },
+  { d:2, s:840, e:930, c0:0, c1:4, t:"CM Mécanique", r:"Amphi Jaules", n:"BORDES GUILHEM", b:"CM" },
+  // VENDREDI
+  { d:4, s:480, e:690, c0:0, c1:4, t:"Projet Réalisé", r:"B412 · B416", n:"BONNEFOI LAURENT · DANIERE GAELLE · PICHON OLIVIER · CLERC MURIEL", b:"PR" },
+  { d:4, s:750, e:840, c0:0, c1:1, t:"TD Thermo 2", r:"B302", n:"MARCONNET LAURENT", b:"TD" },
+];
+function pane(id, titre, days, feuilles) {
+  const P = document.createElement("div"); P.className = "pane"; P.id = id;
+  P.innerHTML = "<h2>" + titre + "</h2>";
+  const hd = document.createElement("div"); hd.className = "headers"; hd.style.marginLeft = "30px";
+  if (days.length === 1) { feuilles.forEach((f) => { const d = document.createElement("div"); d.className = "h"; d.textContent = f; hd.appendChild(d); }); }
+  else { days.forEach((d0) => { const d = document.createElement("div"); d.className = "h"; d.textContent = d0; hd.appendChild(d); }); }
+  P.appendChild(hd);
+  const g = document.createElement("div"); g.className = "grid";
+  for (let h = 8; h <= 18; h += 1) {
+    const y = (h * 60 - 480) * (640 / 630);
+    let l = document.createElement("div"); l.className = "hour"; l.style.top = (y - 5) + "px"; l.textContent = h + "h"; g.appendChild(l);
+    l = document.createElement("div"); l.className = "hline"; l.style.top = y + "px"; g.appendChild(l);
+  }
+  const nd = days.length, ncol = days.length === 1 ? feuilles.length : feuilles.length; // colonnes par jour
+  for (let i = 1; i < nd * ncol; i++) { const v = document.createElement("div"); v.className = "vline"; v.style.left = (100 * i / (nd * ncol)) + "%"; g.appendChild(v); }
+  evs.forEach((e) => {
+    if (!days.includes(e.d)) return;
+    const di = days.indexOf(e.d), cols = feuilles.length;
+    const c0 = feuilles.indexOf(F[e.c0]), c1 = feuilles.indexOf(F[Math.min(e.c1, cols - 1)]);
+    if (c0 < 0 || c1 < c0) return;
+    const left = 100 * (di * cols + c0) / (nd * cols), w = 100 * (c1 - c0 + 1) / (nd * cols);
+    const d = document.createElement("div");
+    d.className = "case" + (e.ex ? " exam" : "");
+    d.style.left = "calc(" + left + "% + 1.5px)"; d.style.width = "calc(" + w + "% - 3px)";
+    d.style.top = ((e.s - 480) * (640 / 630) + 1) + "px"; d.style.height = ((e.e - e.s) * (640 / 630) - 3) + "px";
+    d.innerHTML = '<div class="titre">' + (e.b ? '<span class="badge">' + e.b + '</span> ' : "") + e.t + '</div>'
+      + '<div class="infos">'
+      + '<div class="hor">' + ("0" + Math.floor(e.s / 60)).slice(-2) + "h" + ("0" + e.s % 60).slice(-2) + "–" + ("0" + Math.floor(e.e / 60)).slice(-2) + "h" + ("0" + e.e % 60).slice(-2) + " · " + e.r + '</div>'
+      + '<div class="sub">' + e.n + '</div>'
+      + '<div class="sub">' + F.slice(e.c0, e.c1 + 1).join(" · ") + '</div>'
+      + '</div>';
+    g.appendChild(d);
+  });
+  P.appendChild(g);
+  return P;
+}
+const panes = document.getElementById("panes");
+panes.appendChild(pane("p1", "Vue Journée — lundi — BUT1 COMPLET (5 feuilles)", [0], F));
+panes.appendChild(pane("p2", "Vue Journée — lundi — groupe A SEUL (A1-6 + A7-12, 2 couloirs)", [0], ["A1-6", "A7-12"]));
+panes.appendChild(pane("p3", "Vue Semaine — lun→ven — BUT1 COMPLET (5 feuilles × 5 jours)", [0, 1, 2, 3, 4], F));
+panes.appendChild(pane("p4", "Vue Semaine — lun→ven — groupe A SEUL (2 couloirs/jour)", [0, 1, 2, 3, 4], ["A1-6", "A7-12"]));
+const tg = document.getElementById("tg");
+tg.onclick = () => {
+  const e = document.body.classList.toggle("d141d");
+  document.body.classList.toggle("d141e", !e);
+  tg.textContent = e ? "Vue : 141d (actuel)" : "Vue : 141e (multicol)";
+};
+</script>
+</body>
+</html>
