@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maquette 142 — diff TV (tampon « modifié »)</title>
+<style>
+  :root{
+    --fam-but1-hue:#059669; --fam-but1-dark:#065f46; --fam-but1-bg:#e9f7f0; --fam-but1-txt:#064e3b;
+    --fam-but2-hue:#2563eb; --fam-but2-dark:#1d4ed8; --fam-but2-bg:#e8f0fe; --fam-but2-txt:#1e3a8a;
+    --fam-citise-hue:#0d9488; --fam-citise-dark:#0f766e; --fam-citise-bg:#e5f6f3; --fam-citise-txt:#115e59;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:#020617;color:#e2e8f0;font-family:system-ui,-apple-system,sans-serif;height:100%;overflow:hidden}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#020617}
+  #stage{width:1920px;height:1080px;flex:none;background:#020617;transform-origin:center center}
+  /* ---------- entête, calquée sur le kiosk réel ---------- */
+  .head{display:flex;align-items:center;gap:24px;padding:0 28px;height:84px;flex:none}
+  .head h1{font-size:30px;font-weight:800;letter-spacing:-.02em}
+  .head h1 span{color:#818cf8}
+  .head .date{font-size:21px;font-weight:600;color:#cbd5e1;font-variant-caps:all-small-caps}
+  .head .wk{font-size:17px;font-weight:800;color:#0f172a;background:#f1f5f9;border-radius:8px;padding:2px 8px;font-variant-numeric:tabular-nums}
+  .head .half{font-size:18px;font-weight:700;color:#fcd34d;background:rgba(245,158,11,.25);border-radius:8px;padding:2px 12px}
+  .head .ade{font-size:40px;font-weight:800;color:#6ee7b7;background:rgba(16,185,129,.25);border:1px solid rgba(52,211,153,.7);border-radius:8px;padding:0 8px;margin-left:auto;font-variant-numeric:tabular-nums}
+  .head .clock{font-size:40px;font-weight:800;color:#7dd3fc;font-variant-numeric:tabular-nums}
+  .diffnote{font-size:15px;color:#fbbf24;background:rgba(245,158,11,.12);border:1px dashed rgba(245,158,11,.5);border-radius:8px;padding:3px 10px}
+  /* ---------- moitiés / grilles ---------- */
+  .halfbox{height:498px;display:flex;flex-direction:column}
+  .promohead{display:flex;height:70px;flex:none}
+  .promo{display:flex;flex-direction:column}
+  .promo .pband{display:flex;align-items:center;justify-content:center;gap:4px;height:44px;font-size:17px;font-weight:800;border-bottom:3px solid}
+  .promo .gleaves{display:flex;height:26px}
+  .promo .gleaves div{flex:1;display:grid;place-items:center;font-size:13px;font-weight:700;color:#94a3b8;min-width:0}
+  .gridbody{position:relative;flex:1;display:flex}
+  .tcol{width:58px;flex:none}
+  .tcol div{height:85.6px;text-align:right;padding-right:4px;color:#64748b;font-size:13px;border-bottom:1px solid rgba(30,41,59,.6);line-height:1;position:relative}
+  .tcol span{position:relative;top:-6px}
+  .pgrid{position:relative;flex:1;min-width:0;border-right:1px solid rgba(30,41,59,.9)}
+  .hline{position:absolute;left:0;right:0;border-bottom:1px solid rgba(30,41,59,.42)}
+  .case{position:absolute;border-radius:10px;overflow:hidden;text-align:center;padding:3px 5px;container-type:size}
+  .case .badge{margin:0 auto;width:fit-content;font-weight:700;color:#0f172a;background:#f1f5f9;border-radius:4px;padding:0 4px;font-size:10px;line-height:1.25}
+  .case .titre{font-weight:600;line-height:1.15;font-size:16px}
+  .case .horr{line-height:1.2;font-size:14px}
+  .case .salle{font-weight:900;color:#fde047;line-height:1.2;font-size:23px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .case .ens{opacity:.7;line-height:1.2;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* familles (calquées sur --fam-*) */
+  .but1{background:var(--fam-but1-bg);border:1px solid var(--fam-but1-hue);border-left:4px solid var(--fam-but1-hue);color:var(--fam-but1-txt)}
+  .but1.tp{border:1.6px dashed var(--fam-but1-hue);border-left:1.6px dashed var(--fam-but1-hue)}
+  .but2{background:var(--fam-but2-bg);border:1px solid var(--fam-but2-dark);border-left:4px dotted var(--fam-but2-hue);color:var(--fam-but2-txt)}
+  .citise{background:var(--fam-citise-bg);border:1px solid var(--fam-citise-hue);border-left:4px solid var(--fam-citise-hue);color:var(--fam-citise-txt)}
+  /* ---------- le tampon « modifié » : 3 variantes commutables ---------- */
+  .stamp{position:absolute;pointer-events:none;z-index:7;font-weight:900;text-transform:uppercase;letter-spacing:.04em}
+  /* A — coin haut-droit incliné (tampon-caoutchouc) */
+  .sA{top:2px;right:2px;transform:rotate(-8deg);color:#f59e0b;border:3px solid #f59e0b;border-radius:8px;padding:1px 8px;font-size:15px;background:rgba(15,23,42,.85)}
+  .sA.big{font-size:18px;padding:2px 10px}
+  /* B — filigrane diagonal centré (sous le texte, semi-transparent) */
+  .sB{top:50%;left:50%;transform:translate(-50%,-50%) rotate(-14deg);color:rgba(245,158,11,.55);border:4px solid rgba(245,158,11,.5);border-radius:12px;padding:2px 14px;font-size:26px;background:transparent;white-space:nowrap;z-index:1}
+  /* C — bandeau haut pleine largeur (pousse le contenu vers le bas) */
+  .sC{top:0;left:0;right:0;background:#f59e0b;color:#0f172a;font-size:14px;text-align:center;padding:1px 0;border-radius:10px 10px 0 0}
+  /* case fantôme (créneau supprimé) : pas de fond, pas de contour — le tampon seul */
+  .ghost{position:absolute;pointer-events:none}
+  /* ---------- barre de comparaison hors scène ---------- */
+  #bar{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;gap:10px;padding:8px 14px;background:rgba(2,6,23,.96);border-bottom:1px solid #1e293b;font-size:14px}
+  #bar b{color:#818cf8}
+  #bar button{font:inherit;font-weight:700;color:#e2e8f0;background:#1e293b;border:1px solid #334155;border-radius:8px;padding:4px 12px;cursor:pointer}
+  #bar button.on{background:#4338ca;border-color:#6366f1;color:#fff}
+  #leg{position:fixed;left:0;right:0;bottom:0;z-index:20;background:rgba(2,6,23,.96);border-top:1px solid #1e293b;padding:6px 14px;font-size:13px;color:#94a3b8;display:flex;gap:18px;flex-wrap:wrap;justify-content:center}
+  #leg .k{color:#f59e0b;font-weight:800}
+</style>
+</head>
+<body>
+<div id="bar">
+  <b>Maquette 142</b> — tampon TV « modifié » :
+  <button data-v="A" class="on">A · coin haut-droit incliné</button>
+  <button data-v="B">B · filigrane diagonal</button>
+  <button data-v="C">C · bandeau haut</button>
+  <span style="margin-left:auto;color:#64748b">Scène 1920×1080 forcée fit=1 (échelle auto) · matin 8h–13h fictif</span>
+</div>
+<div id="wrap"><div id="stage">
+  <div class="head">
+    <h1>Dpt <span>MP</span> — IUT St-Étienne</h1>
+    <span class="date">lundi 30 novembre</span>
+    <span class="wk">S48</span>
+    <span class="half">Matin</span>
+    <span class="diffnote">Δ modifs ADE depuis vendredi 12h00</span>
+    <span class="ade">ADE ✓ 12:04</span>
+    <span class="clock">12:04</span>
+  </div>
+
+  <!-- ============ moitié HAUTE : BUT1 + CiTiSE1 (tous les cas de diff) ============ -->
+  <div class="halfbox">
+    <div class="promohead">
+      <div class="promo" style="flex:4">
+        <div class="pband but1" style="border-bottom-color:var(--fam-but1-hue);color:var(--fam-but1-hue)">BUT1</div>
+        <div class="gleaves"><div>A1-1</div><div>A1-2</div><div>A1-3</div><div>ALT1</div></div>
+      </div>
+      <div class="promo" style="flex:2">
+        <div class="pband citise" style="border-bottom-color:var(--fam-citise-hue);color:var(--fam-citise-hue)">CiTiSE1</div>
+        <div class="gleaves"><div>C1-A</div><div>C1-B</div></div>
+      </div>
+    </div>
+    <div class="gridbody">
+      <div class="tcol"><div><span>8h</span></div><div><span>9h</span></div><div><span>10h</span></div><div><span>11h</span></div><div><span>12h</span></div></div>
+      <div class="pgrid" id="g1"></div>
+      <div class="pgrid" id="g2"></div>
+    </div>
+  </div>
+
+  <!-- ============ moitié BASSE : BUT2 + CiTiSE2 (contexte réaliste) ============ -->
+  <div class="halfbox">
+    <div class="promohead">
+      <div class="promo" style="flex:3">
+        <div class="pband but2" style="border-bottom-color:var(--fam-but2-hue);color:var(--fam-but2-hue)">BUT2</div>
+        <div class="gleaves"><div>MP2-A</div><div>MP2-B</div><div>MP2-ALT</div></div>
+      </div>
+      <div class="promo" style="flex:2">
+        <div class="pband citise" style="border-bottom-color:var(--fam-citise-hue);color:var(--fam-citise-hue)">CiTiSE2</div>
+        <div class="gleaves"><div>C2-A</div><div>C2-B</div></div>
+      </div>
+    </div>
+    <div class="gridbody">
+      <div class="tcol"><div><span>13h</span></div><div><span>14h</span></div><div><span>15h</span></div><div><span>16h</span></div><div><span>17h</span></div></div>
+      <div class="pgrid" id="g3"></div>
+      <div class="pgrid" id="g4"></div>
+    </div>
+  </div>
+</div></div>
+
+<div id="leg">
+  <span><span class="k">①</span> modifié (salle changée)</span>
+  <span><span class="k">②</span> déplacé (case au nouvel horaire ; l'ancien créneau ne laisse rien)</span>
+  <span><span class="k">③</span> ajouté</span>
+  <span><span class="k">④</span> supprimé (case fantôme : fond vide + tampon seul)</span>
+  <span><span class="k">⑤</span> créneau d'1 h modifié (tampon sur petite case)</span>
+  <span>autres cases : inchangées, aucun marquage</span>
+</div>
+
+<script>
+/* ---------- fabrique de case (calquée sur le rendu kiosk : titre, ⏰, salle jaune, enseignant) ---------- */
+const R = 85.6; /* hauteur d'1 heure en px (corps 428 / 5 h) */
+let VARIANT = 'sA';
+function caseHTML(t){
+  let s = '';
+  if (t.badge) s += '<div class="badge">' + t.badge + '</div>';
+  s += '<div class="titre">' + t.titre + '</div>';
+  if (t.h >= 44) s += '<div class="horr">⏰ ' + t.de + '–' + t.a + '</div>';
+  if (t.h >= 44) s += '<div class="salle">' + t.salle + '</div>';
+  if (t.h >= 76) s += '<div class="ens">' + t.ens + '</div>';
+  return s;
+}
+function render(gridId, leaves, evs){
+  const g = document.getElementById(gridId);
+  for (let i = 1; i < 5; i++) { const h = document.createElement('div'); h.className = 'hline'; h.style.top = (i * R) + 'px'; g.appendChild(h); }
+  const unit = 100 / leaves.length;
+  evs.forEach(t => {
+    const d = document.createElement('div');
+    if (t.kind === 'ghost') {           /* créneau supprimé : fond vide, tampon seul */
+      d.className = 'ghost';
+      d.style.top = ((t.d - 8) * R + 2) + 'px';
+      d.style.height = (t.h) + 'px';
+      d.style.left = 'calc(' + (unit * t.c0) + '% + 1.5px)';
+      d.style.width = 'calc(' + (unit * (t.c1 - t.c0 + 1)) + '% - 3px)';
+      d.innerHTML = '<div class="stamp" style="top:50%;left:50%;transform:translate(-50%,-50%) rotate(-8deg);color:#f59e0b;border:3px solid #f59e0b;border-radius:8px;padding:1px 8px;font-size:15px;background:rgba(15,23,42,.7);letter-spacing:.04em;font-weight:900;text-transform:uppercase">✎ modifié</div>';
+    } else {
+      d.className = 'case ' + t.fam;
+      d.style.top = ((t.d - 8) * R + 2) + 'px';
+      d.style.height = (t.h - 4) + 'px';
+      d.style.left = 'calc(' + (unit * t.c0) + '% + 1.5px)';
+      d.style.width = 'calc(' + (unit * (t.c1 - t.c0 + 1)) + '% - 3px)';
+      d.innerHTML = caseHTML(t) + (t.stamp ? '<div class="stamp ' + VARIANT + (t.small ? '' : '') + '">✎ modifié</div>' : '');
+    }
+    g.appendChild(d);
+  });
+}
+/* moitié haute : h début décimal depuis 8h (matin), h = hauteur en px, c0..c1 = colonnes feuilles */
+render('g1', ['A1-1','A1-2','A1-3','ALT1'], [
+  { d: 0.0, h: 2*R, c0: 0, c1: 3, fam: 'but1', titre: 'Optique géométrique', salle: 'D201', ens: 'Guilhem Bordes', de: '8h00', a: '10h00', stamp: 0 },                                        /* CM fusionné BUT1 — inchangé */
+  { d: 2.0, h: 2*R, c0: 0, c1: 0, fam: 'but1 tp', badge: 'TP', titre: 'Optique TP', salle: 'D204', ens: 'Laurent Marconnet', de: '10h00', a: '12h00', stamp: 1 },                             /* ① modifié (salle D204←D203) */
+  { d: 0.0, h: 1.5*R, c0: 1, c1: 1, fam: 'but2', badge: 'TD', titre: 'Thermodynamique TD', salle: 'C103', ens: 'Sophie Renard', de: '8h00', a: '9h30', stamp: 0 },                             /* inchangé */
+  { d: 3.5, h: 1.5*R, c0: 1, c1: 1, fam: 'but2', titre: 'Électronique', salle: 'B07', ens: 'Marc Dupuis', de: '11h30', a: '13h00', stamp: 1 },                                                 /* ③ ajouté */
+  { d: 2.0, h: 1*R, c0: 2, c1: 2, fam: 'but2', badge: 'TD', titre: 'Mécanique TD', salle: 'C105', ens: 'Aline Ferret', de: '10h00', a: '11h00', stamp: 1, small: 1 },                          /* ⑤ modifié sur case d'1 h */
+  { d: 3.0, h: 1*R, c0: 3, c1: 3, fam: 'but1', titre: 'Anglais', salle: 'A11', ens: 'Jo Brown', de: '11h00', a: '12h00', stamp: 0 },                                                           /* inchangé */
+  { d: 1.0, h: 1.5*R, c0: 3, c1: 3, fam: 'but1', titre: '', kind: 'ghost' }                                                                                                                   /* ④ supprimé : fantôme 9h–10h30 */
+]);
+/* le déplacé : ancien emplacement 8h30 A1-3 = fantôme discret ? NON — déplacé = case au nouvel endroit ;
+   on marque l'ancienne case comme supprimée-fantôme SEULEMENT si le créneau a disparu du flux :
+   pour le déplacé on montre ② : case au nouvel horaire avec tampon. */
+render('g2', ['C1-A','C1-B'], [
+  { d: 0.5, h: 2*R, c0: 0, c1: 0, fam: 'citise', titre: 'Métrologie', salle: 'D301', ens: 'Nadia Cheriet', de: '8h30', a: '10h30', stamp: 1 },                                                /* ② déplacé (était 10h30–12h30) */
+  { d: 0.0, h: 1*R, c0: 1, c1: 1, fam: 'citise', badge: 'TP', titre: 'Capteurs TP', salle: 'D305', ens: 'Éric Vidal', de: '8h00', a: '9h00', stamp: 0 },
+  { d: 2.0, h: 2*R, c0: 1, c1: 1, fam: 'citise', titre: 'Instrumentation', salle: 'D302', ens: 'Hélène Roche', de: '10h00', a: '12h00', stamp: 0 }
+]);
+render('g3', ['MP2-A','MP2-B','MP2-ALT'], [
+  { d: 0.0, h: 2*R, c0: 0, c1: 1, fam: 'but2', titre: 'Mathématiques', salle: 'Amphi 2', ens: 'Pascal Henry', de: '13h00', a: '15h00', stamp: 0 },
+  { d: 3.0, h: 1.5*R, c0: 2, c1: 2, fam: 'but2 tp', badge: 'TP', titre: 'Chimie TP', salle: 'L204', ens: 'Inès Blanc', de: '16h00', a: '17h30', stamp: 1, small: 1 }                           /* modifié (horaire) sur case 1h30 */
+]);
+render('g4', ['C2-A','C2-B'], [
+  { d: 1.0, h: 2*R, c0: 0, c1: 1, fam: 'citise', titre: 'Qualité', salle: 'E101', ens: 'Bruno Lamy', de: '14h00', a: '16h00', stamp: 0 },
+  { d: 3.5, h: 1.5*R, c0: 0, c1: 0, kind: 'ghost' }                                                                                                                                            /* supprimé 16h30–18h */
+]);
+
+/* ---------- échelle fit=1 forcée (comme ?fit=1 du kiosk) ---------- */
+function fit(){
+  const s = Math.min(innerWidth / 1920, (innerHeight - 78) / 1080);
+  document.getElementById('stage').style.transform = 'scale(' + s + ')';
+}
+addEventListener('resize', fit); fit();
+
+/* ---------- commutation des 3 variantes de tampon ---------- */
+document.querySelectorAll('#bar button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#bar button').forEach(x => x.classList.remove('on'));
+  b.classList.add('on');
+  VARIANT = b.dataset.v === 'A' ? 'sA' : (b.dataset.v === 'B' ? 'sB' : 'sC');
+  document.querySelectorAll('.case .stamp').forEach(el => el.className = 'stamp ' + VARIANT);
+});
+</script>
+</body>
+</html>
