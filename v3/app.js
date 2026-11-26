@@ -2130,7 +2130,12 @@ const ADAPT_CSS_141C = [
 // change JAMAIS), plafonds bornés (titre 18 px, horaire 13, secondaires 12).
 // cqh/cqw = % du conteneur ; min() borne aussi par la LARGEUR (une case étroite
 // et haute ne gonfle pas). En clair, le titre passe en graisse 700.
-".cq-case{container-type:size}", ".cq-case .cq-titre{font-size:clamp(11px,min(14cqh,6cqw),18px)!important}", ".cq-case .cq-hor{font-size:clamp(10px,min(10cqh,5cqw),13px)!important}", ".cq-case .cq-sub{font-size:clamp(10px,min(9cqh,4.5cqw),12px)!important}", "html.light .cq-titre{font-weight:700}"].join("\n");
+".cq-case{container-type:size}", ".cq-case .cq-titre{font-size:clamp(11px,min(14cqh,6cqw),18px)!important}", ".cq-case .cq-hor{font-size:clamp(10px,min(10cqh,5cqw),13px)!important}", ".cq-case .cq-sub{font-size:clamp(10px,min(9cqh,4.5cqw),12px)!important}", "html.light .cq-titre{font-weight:700}",
+// SUITE 141e : infos multicolonnes des cases XL (GO maquette-141e) — alignees a
+// GAUCHE, N colonnes calculees par le navigateur (3-2-1 au redimensionnement,
+// temps reel, zero JS), remplissage hauteur d'abord, trop-plein rogne au bord
+// sans ellipsis, chaque ligne insécable (break-inside:avoid).
+".cq-case .infos141e{columns:88px auto;column-fill:auto;column-gap:12px;text-align:left}", ".cq-case .infos141e>div{break-inside:avoid}"].join("\n");
 function tvAbbr(s) {
   // SUITE 132 : abréviation FR des intitulés ADE — règles connues, puis repli (mot > 11 lettres → coupé avec point)
   if (!s) return s;
@@ -4814,7 +4819,7 @@ function App() {
             slotPromo: slot.promo,
             slotKind: slot.kind
           }),
-          className: "absolute rounded-lg text-left overflow-hidden cq-case hover:z-10 hover:scale-[1.02] transition shadow " + (xl130 ? "flex gap-3 items-start justify-center " : "") + (hgt >= thE ? "p-1.5" : "p-1"),
+          className: "absolute rounded-lg text-left overflow-hidden cq-case hover:z-10 hover:scale-[1.02] transition shadow " + (xl130 ? "flex gap-3 items-start justify-start " : "") + (hgt >= thE ? "p-1.5" : "p-1"),
           style: {
             ...c.style,
             top: top + 2 + "px",
@@ -4864,16 +4869,16 @@ function App() {
         })(), xl130 ? /*#__PURE__*/React.createElement("div", {
           className: "flex flex-col min-w-0",
           style: {
-            flex: "0 1 auto",
+            flex: "0 0 auto",
             minWidth: 0,
-            maxWidth: "55%"
+            maxWidth: "38%"
           }
         }, lineBadge130g, lineTitre130g) : [lineBadge130g, lineTitre130g], xl130 ? /*#__PURE__*/React.createElement("div", {
-          className: "flex flex-col items-end text-right min-w-0",
+          className: "infos141e min-w-0",
           style: {
-            flex: "0 1 auto",
+            flex: "1 1 auto",
             minWidth: 0,
-            maxWidth: "58%"
+            height: "100%"
           }
         }, lineHoraire130g, lineEnsPC130g, lineGrp130g, lineEnsTR130g, lineSalleRoom130g) : [lineHoraire130g, lineEnsPC130g, lineGrp130g, lineEnsTR130g, lineSalleRoom130g], hgt >= th36 && /*#__PURE__*/React.createElement("span", {
           className: "absolute bottom-0 right-0 z-[5] leading-none pr-0.5 pl-0.5 text-[9px] text-slate-500/90 bg-slate-900/50 rounded-tl"
