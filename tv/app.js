@@ -2526,6 +2526,34 @@ function Kiosk132({
     transform: "scale(" + scale + ")",
     transformOrigin: "center center"
   };
+
+  // SUITE 148d : numérotation de séance « n/N » — MÊMES RÈGLES QUE L'APP :
+  // clé promo|norm(summary)|serKey triée par start, badge masqué si occurrence
+  // unique ou évaluation (noBadgeEv). Index bâti sur TOUTE la semaine (allEvents),
+  // pas seulement la ½ journée affichée : l'étudiant retrouve son numéro de séance.
+  const occ148 = useMemo(() => {
+    const m = {};
+    for (const p of Object.keys(allEvents || {})) for (const e of allEvents[p] || []) {
+      if (!e || !e.summary) continue;
+      const k = p + "|" + norm(e.summary) + "|" + serKey(e, p);
+      if (!m[k]) m[k] = [];
+      m[k].push(e.start.getTime());
+    }
+    const out = {};
+    for (const k of Object.keys(m)) {
+      const a = m[k].slice().sort((x, y) => x - y);
+      for (let i = 0; i < a.length; i++) out[k + "@" + a[i]] = {
+        n: i + 1,
+        N: a.length
+      };
+    }
+    return out;
+  }, [allEvents]);
+  const tvBadge148 = (e, p) => {
+    if (noBadgeEv(e)) return null;
+    const o = occ148[p + "|" + norm(e.summary) + "|" + serKey(e, p) + "@" + e.start.getTime()];
+    return o && o.N > 1 ? o : null;
+  };
   const zoneBlocks = z => {
     // une moitié : grille pleine largeur, colonnes = feuilles des promos de la zone
     if (!z.promos.length) return null;
@@ -2546,7 +2574,12 @@ function Kiosk132({
       style: {
         height: HEAD - 14
       }
-    }, z.promos.map(q => {
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 58,
+        flex: "none"
+      }
+    }), z.promos.map(q => {
       const fk = FAM[PROMO_FAMILY[q.p] || "dept"] ? PROMO_FAMILY[q.p] || "dept" : "dept";
       const f = FAM[fk];
       const altP = q.p === "MP-2A-ALT" || q.p === "MP-3A-AVTECH" || q.p === "MP-3A-TECHVIMAT" || q.p === "MP-3A-MAE" && q.evs.some(e => (e.groups || []).some(g => /alt/i.test(g)));
@@ -2571,7 +2604,7 @@ function Kiosk132({
       }, /*#__PURE__*/React.createElement("span", {
         className: "font-extrabold",
         style: {
-          fontSize: 17
+          fontSize: 22
         }
       }, (PROMOS[q.p] || {
         label: q.p
@@ -2697,23 +2730,42 @@ function Kiosk132({
             background: "rgba(15,23,42,.85)",
             zIndex: 7
           }
-        }, "✎ modifié"), c.badge && /*#__PURE__*/React.createElement("div", {
-          className: "mx-auto w-fit font-bold text-slate-900 bg-slate-100 rounded px-1 leading-tight",
-          style: {
-            fontSize: isNow ? 12 : 10
-          }
-        }, c.badge), /*#__PURE__*/React.createElement("div", {
-          className: "font-semibold leading-tight line-clamp-2",
-          style: {
-            fontSize: isNow ? "clamp(19px,16cqh,24px)" : "clamp(15px,14cqh,19px)"
-          }
-        }, tvAbbr(typeTitle(e.summary, c.badge === "TP" && e.end - e.start >= 2 * 36e5 ? null : c.badge, true))), (isNow || T >= 44) && /*#__PURE__*/React.createElement("div", {
-          className: "leading-tight",
-          style: {
-            fontSize: isNow ? "clamp(16px,11cqh,20px)" : "clamp(14px,10cqh,17px)"
-          }
-        }, "\u23F0 " + fmtHM(e.start) + "–" + fmtHM(e.end)), (isNow || T >= 44) && e.location && /*#__PURE__*/React.createElement("div", {
-          className: "font-black text-yellow-300 leading-tight truncate",
+        }, "✎ modifié"), (() => {
+          const serB = tvBadge148(e, q.p);
+          const tB = c.badge;
+          const bSt = {
+            fontSize: isNow ? 14 : "clamp(11px,8cqh,14px)",
+            padding: "0 4px",
+            borderRadius: 4
+          };
+          const tSt = isNow ? "clamp(19px,16cqh,24px)" : T >= 44 ? "clamp(15px,14cqh,19px)" : "clamp(12px,8cqh,15px)";
+          const title = tvAbbr(typeTitle(e.summary, tB === "TP" && e.end - e.start >= 2 * 36e5 ? null : tB, true));
+          return /*#__PURE__*/React.createElement("div", {
+            className: "flex items-center justify-center leading-none " + (T >= 44 ? "gap-1.5 " : "gap-1 ") + (T < 44 ? "whitespace-nowrap " : "")
+          }, tB && /*#__PURE__*/React.createElement("span", {
+            className: "flex-none font-bold text-slate-900 bg-slate-100 rounded",
+            style: bSt
+          }, tB), serB && /*#__PURE__*/React.createElement("span", {
+            className: "flex-none font-bold text-slate-900 bg-slate-100 rounded",
+            style: bSt
+          }, serB.n + "/" + serB.N), /*#__PURE__*/React.createElement("span", {
+            className: "font-semibold truncate min-w-0",
+            style: {
+              fontSize: tSt
+            }
+          }, title), T >= 44 && /*#__PURE__*/React.createElement("span", {
+            className: "flex-none opacity-70",
+            style: {
+              fontSize: isNow ? "clamp(16px,11cqh,20px)" : "clamp(11px,8cqh,14px)"
+            }
+          }, "\u23F0 " + fmtHM(e.start) + "–" + fmtHM(e.end)), T < 44 && e.location && /*#__PURE__*/React.createElement("span", {
+            className: "flex-none font-black text-yellow-300",
+            style: {
+              fontSize: "clamp(11px,8cqh,15px)"
+            }
+          }, e.location));
+        })(), T >= 44 && e.location && /*#__PURE__*/React.createElement("div", {
+          className: "font-black text-yellow-300 leading-tight " + (T < 76 ? "line-clamp-2" : "truncate"),
           style: {
             fontSize: isNow ? "clamp(26px,15cqh,34px)" : "clamp(22px,13cqh,28px)"
           }
@@ -2772,10 +2824,14 @@ function Kiosk132({
     style: stageStyle,
     className: "bg-slate-950 text-slate-100 font-sans flex flex-col"
   }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      height: 90,
+      flex: "none"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
     className: "flex items-center gap-6 px-7",
     style: {
-      height: 84,
-      flex: "none"
+      height: 52
     }
   }, /*#__PURE__*/React.createElement("h1", {
     className: "font-extrabold tracking-tight",
@@ -2784,16 +2840,54 @@ function Kiosk132({
     }
   }, "Dpt ", /*#__PURE__*/React.createElement("span", {
     className: "text-indigo-400"
-  }, "MP"), " — IUT St-Étienne"), !k132.empty && /*#__PURE__*/React.createElement("span", {
+  }, "MP"), " — IUT St-Étienne"), (() => {
+    const errs = feedErrs && feedErrs.length;
+    const stale = !busy && lastSync && nowT.getTime() - new Date(lastSync).getTime() > 3600e3;
+    const red = !busy && !!errs;
+    const amber = !busy && !errs && stale;
+    const cls134 = red ? "bg-red-500/25 border border-red-400/70 text-red-300 rounded-lg px-2 " : amber ? "bg-amber-500/25 border border-amber-400/70 text-amber-300 rounded-lg px-2 " : "bg-emerald-500/25 border border-emerald-400/70 text-emerald-300 rounded-lg px-2 ";
+    const msg = red ? "⚠ erreur de synchro, dernière à : " : amber ? "⚠ dernière synchro à : " : "✓ Données synchronisées à : ";
+    const tip = red ? "⚠ Erreur de synchro — dernières données affichées de " + (lastSync ? fmtHM(lastSync) : "—") + " ; prévenir le SI si ça persiste" : amber ? "⚠ Données non rafraîchies depuis plus d'une heure (dernière synchro : " + (lastSync ? fmtHM(lastSync) : "—") + ") ; prévenir le SI si ça persiste" : "Dernière synchronisation des flux ADE — vert si ok, jaune (>1 h sans rafraîchissement) ou rouge (erreur de synchro)";
+    return /*#__PURE__*/React.createElement("span", {
+      className: cls134 + "ml-auto font-extrabold tabular-nums",
+      style: {
+        fontSize: 20
+      },
+      title: tip
+    }, busy ? "Synchronisation…" : !lastSync ? "chargement…" : red || amber ? /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 22
+      }
+    }, msg + fmtHM(lastSync)) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", null, msg), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 40
+      }
+    }, fmtHM(lastSync))));
+  })(), /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-400",
     style: {
-      fontSize: 21
+      fontSize: 20
+    }
+  }, "Heure actuelle"), /*#__PURE__*/React.createElement("span", {
+    className: "font-extrabold text-sky-300 tabular-nums",
+    style: {
+      fontSize: 40
+    }
+  }, String(nowT.getHours()).padStart(2, "0") + ":" + String(nowT.getMinutes()).padStart(2, "0"))), /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-4 px-7",
+    style: {
+      height: 38
+    }
+  }, !k132.empty && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 28
     },
     className: "capitalize font-semibold text-slate-300"
   }, dayLbl), !k132.empty && (wkEdit === null ? /*#__PURE__*/React.createElement("span", {
     onClick: () => setWkEdit(String(tvIsoW(k132.day))),
     className: "font-extrabold text-slate-900 bg-slate-100 hover:bg-white rounded-lg px-2 py-0.5 tabular-nums cursor-pointer",
     style: {
-      fontSize: 17
+      fontSize: 24
     },
     title: "Numéro de semaine ISO (repère ADE/logistique) — cliquez pour naviguer directement vers une autre semaine (recette)"
   }, "S" + tvIsoW(k132.day)) : /*#__PURE__*/React.createElement("input", {
@@ -2810,15 +2904,15 @@ function Kiosk132({
       }
     },
     onBlur: () => setWkEdit(null),
-    className: "w-[52px] bg-white text-slate-900 font-extrabold text-center rounded-lg px-1 py-0.5 tabular-nums outline-none border-2 border-sky-400",
+    className: "w-[64px] bg-white text-slate-900 font-extrabold text-center rounded-lg px-1 py-0.5 tabular-nums outline-none border-2 border-sky-400",
     style: {
-      fontSize: 17
+      fontSize: 24
     },
     title: "Semaine ISO cible (1-53) — Entrée pour valider, Échap pour annuler"
   })), !k132.empty && /*#__PURE__*/React.createElement("span", {
     className: "font-bold rounded-lg px-3 py-0.5",
     style: {
-      fontSize: 18,
+      fontSize: 22,
       background: k132.pm ? "rgba(59,130,246,.25)" : "rgba(245,158,11,.25)",
       color: k132.pm ? "#93c5fd" : "#fcd34d"
     }
@@ -2876,29 +2970,10 @@ function Kiosk132({
     style: {
       fontSize: 16
     }
-  }, "›")), (() => {
-    const errs = feedErrs && feedErrs.length;
-    const stale = !busy && lastSync && nowT.getTime() - new Date(lastSync).getTime() > 3600e3;
-    const red = !busy && !!errs;
-    const amber = !busy && !errs && stale;
-    const cls134 = red ? "bg-red-500/25 border border-red-400/70 text-red-300 rounded-lg px-2 " : amber ? "bg-amber-500/25 border border-amber-400/70 text-amber-300 rounded-lg px-2 " : "bg-emerald-500/25 border border-emerald-400/70 text-emerald-300 rounded-lg px-2 ";
-    const label = red ? errs ? "⚠ flux ADE en erreur" : "" : amber ? "⚠ dernier refresh " + fmtHM(lastSync) : lastSync ? "ADE ✓ " + fmtHM(lastSync) : null;
-    return /*#__PURE__*/React.createElement("span", {
-      className: cls134 + "ml-auto font-extrabold tabular-nums",
-      style: {
-        fontSize: busy ? 20 : red || amber ? 22 : 40
-      },
-      title: red ? "⚠ Flux ADE en erreur — dernières données affichées de " + (lastSync ? fmtHM(lastSync) : "—") + " ; prévenir le SI si ça persiste" : amber ? "⚠ Données non rafraîchies depuis plus d'une heure (dernier sync : " + (lastSync ? fmtHM(lastSync) : "—") + ") ; prévenir le SI si ça persiste" : "Heure du dernier rafraîchissement ADE — vert si ok, jaune (>1 h sans refresh) ou rouge (flux en erreur)"
-    }, busy ? "Synchronisation…" : label || "chargement…");
-  })(), /*#__PURE__*/React.createElement("span", {
-    className: "font-extrabold text-sky-300 tabular-nums",
-    style: {
-      fontSize: 40
-    }
-  }, String(nowT.getHours()).padStart(2, "0") + ":" + String(nowT.getMinutes()).padStart(2, "0"))), k132.empty ? /*#__PURE__*/React.createElement("div", {
+  }, "›")))), k132.empty ? /*#__PURE__*/React.createElement("div", {
     className: "grid",
     style: {
-      height: 996
+      height: 990
     }
   }, /*#__PURE__*/React.createElement("div", {
     className: "place-self-center text-slate-500",
@@ -2908,7 +2983,7 @@ function Kiosk132({
   }, "Aucun créneau à venir dans les 8 prochains jours.")) : /*#__PURE__*/React.createElement("div", {
     className: "flex flex-col gap-2 px-3 pb-2",
     style: {
-      height: 996
+      height: 990
     }
   }, zoneBlocks(k132.zones[0]), zoneBlocks(k132.zones[1]))));
 }
@@ -5359,9 +5434,11 @@ function App() {
   // bas de ses groupes ; promo entière → nœud promo) : A1-6 seul ne marque QUE
   // A1-6, tout-A marque QUE A, le parent et les frères non touchés ne portent
   // RIEN — zéro surcharge, le nombre total de pastilles = nombre de changements.
-  // Consulter un nœud (clic pastille → modal filtré, comportement 79/86 réutilisé)
-  // le marque « vu » : SA pastille disparaît ; le badge Δ global d'entête et le
-  // modal restent inchangés (suite 71 conservée) jusqu'au prochain ↻.
+  // SUITE 147 : les pastilles vivent AUSSI LONGTEMPS que le badge Δ global (suite 71),
+  // c'est-à-dire jusqu'au prochain ↻ — plus d'état « vu » : consulter un nœud (clic
+  // pastille → modal filtré, comportement 79/86 réutilisé) ne fait plus disparaître SA
+  // pastille (sinon on oublie ce qu'on vient de voir) ; l'ancien mécanisme « consulté
+  // = caché » de la 144 (clé localStorage dédiée) est retiré, clé ignorée si présente.
   const diffNodes144 = useMemo(() => {
     const m = {};
     if (diff && Array.isArray(diff.items)) for (const it of diff.items) {
@@ -5371,37 +5448,7 @@ function App() {
     }
     return m;
   }, [diff]);
-  const [diffSeen144, setDiffSeen144] = useState(() => {
-    try {
-      const s = load("edt2-diffseen");
-      return s && diff && s.at === diff.at && s.keys ? s.keys : {};
-    } catch (e) {
-      return {};
-    }
-  });
-  useEffect(() => {
-    try {
-      store("edt2-diffseen", null);
-    } catch (e) {}
-    setDiffSeen144({});
-  }, [diff && diff.at]);
-  const diffNodeBadge144 = (p, g) => {
-    const k = p + "|" + (g || "");
-    return diffSeen144[k] ? 0 : diffNodes144[k] || 0;
-  };
-  const diffNodeSeen144 = (p, gs) => {
-    const keys = {
-      ...diffSeen144
-    };
-    for (const g of gs) keys[p + "|" + (g || "")] = true;
-    setDiffSeen144(keys);
-    try {
-      store("edt2-diffseen", {
-        at: diff && diff.at,
-        keys
-      });
-    } catch (e) {}
-  };
+  const diffNodeBadge144 = (p, g) => diffNodes144[p + "|" + (g || "")] || 0;
   // compteurs CM/TD/TP affichés dans la ligne d'un favori enseignant
   const favStatsEl = s => {
     if (!s || s.kind !== "teacher" || !s.teacher) return null;
@@ -6161,7 +6208,6 @@ function App() {
       className: "text-xs font-semibold rounded-lg px-2 py-1 border transition " + (slot.promo === p ? "bg-indigo-400 text-slate-900 border-indigo-400" : "bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500")
     }, WIDE ? PROMOS[p].label : PROMOS[p].short || PROMOS[p].label), diffNodeBadge144(p, "") > 0 && /*#__PURE__*/React.createElement("button", {
       onClick: () => {
-        diffNodeSeen144(p, [""]);
         setDiffFilter({
           kind: "promo",
           promo: p,
@@ -6210,7 +6256,6 @@ function App() {
           className: "font-medium rounded-lg px-1.5 py-1 border transition text-[11px] " + (on ? "bg-indigo-400 text-slate-900 border-indigo-400" : "bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500")
         }, gs.length > 1 ? gs.join("/") : grpDisp(slot.promo, g)), n144 > 0 && /*#__PURE__*/React.createElement("button", {
           onClick: () => {
-            diffNodeSeen144(slot.promo, gs);
             setDiffFilter({
               kind: "promo",
               promo: slot.promo,
