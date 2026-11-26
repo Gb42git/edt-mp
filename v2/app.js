@@ -4732,7 +4732,7 @@ function App() {
         }
         // SUITE 130 : palier « case XL » — largeur ESTIMÉE de cette case (w est en % de la colonne-jour), puis seuils détendus façon vue Journée pour les cases larges.
         const caseWp130 = estDayPx130 * w / 100;
-        const xl130 = caseWp130 >= 150;
+        const xl130 = caseWp130 >= 230; // SUITE 141d : seuil relevé 150→230 (154 px n'est pas « large » : pile verticale pleine largeur)
         const xThT130 = xl130 ? Math.min(thT, Math.round(45 * sc)) : thT;
         const xThE130 = xl130 ? Math.min(thE, Math.round(30 * sc)) : thE;
         // SUITE 132g : disposition HORIZONTALE des cases XL — retour recette : « hauteur
@@ -4864,13 +4864,15 @@ function App() {
         })(), xl130 ? /*#__PURE__*/React.createElement("div", {
           className: "flex flex-col min-w-0",
           style: {
-            flex: "none",
+            flex: "0 1 auto",
+            minWidth: 0,
             maxWidth: "55%"
           }
         }, lineBadge130g, lineTitre130g) : [lineBadge130g, lineTitre130g], xl130 ? /*#__PURE__*/React.createElement("div", {
           className: "flex flex-col items-end text-right min-w-0",
           style: {
-            flex: "none",
+            flex: "0 1 auto",
+            minWidth: 0,
             maxWidth: "58%"
           }
         }, lineHoraire130g, lineEnsPC130g, lineGrp130g, lineEnsTR130g, lineSalleRoom130g) : [lineHoraire130g, lineEnsPC130g, lineGrp130g, lineEnsTR130g, lineSalleRoom130g], hgt >= th36 && /*#__PURE__*/React.createElement("span", {
