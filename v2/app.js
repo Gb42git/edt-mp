@@ -2164,6 +2164,107 @@ const tvIsoW = d => {
   const f = new Date(Date.UTC(t.getUTCFullYear(), 0, 4));
   return 1 + Math.round(((t - f) / 864e5 - 3 + (f.getUTCDay() + 6) % 7) / 7);
 };
+// SUITE 143 : DIFF TV — tampon « ✎ MODIFIÉ » contre la baseline du VENDREDI 12h00.
+// Design acté (maquette maquette-tvdiff-142.html, option A validée en recette) :
+// UN SEUL badge pour AJOUTÉ / MODIFIÉ / DÉPLACÉ (l'étudiant compare avec ce qu'il a
+// vu vendredi en sortant de l'IUT) ; un créneau SUPPRIMÉ n'a plus de case → case
+// FANTÔME (fond vide, pas de contour) + le même tampon à l'ancien emplacement.
+// Baseline capturée au PREMIER rendu tombé dans la fenêtre vendredi 12h00-24h00
+// (garde ≥ 100 créneaux : jamais de baseline sur une base vide/à moitié syncée) ;
+// TV éteinte pendant toute la fenêtre = PAS de diff cette semaine (perte acceptée,
+// retour au vendredi suivant — la base court de ven 12h à ven 12h). Identité d'un
+// créneau : promo|intitulé|groupes|enseignant, INDÉPENDANTE de l'horaire (un créneau
+// déplacé reste le même créneau : badge au nouvel emplacement, PAS de fantôme) ;
+// « modifié » = horaire ou salle changée. Le tampon vit hors flux du texte (141c
+// intouchées) et ne couvre jamais la salle (coin haut-droit incliné).
+const TVDIFF_KEY = "edt2-tvdiff-base";
+const tvDiffKey143 = (e, p) => [p, String(e.summary || "").replace(/\s+/g, " ").trim(), (e.groups || []).join("+"), e.teacher || ""].join("|");
+const tvGhostLeaves143 = (gs, leaves) => {
+  // SUITE 143 : colonnes couvertes par un fantôme (feuilles touchées par les groupes)
+  const hit = leaves.filter(l => (gs || []).some(g => l === g || l.startsWith(g + "-") || g === "Tous"));
+  return hit.length ? hit : leaves;
+};
+function tvDiff143(allEvents, nowT) {
+  // SUITE 143 : → { on, flags:Map(event→true), ghosts:[{p,gs,start,end}] }
+  const out = {
+    on: false,
+    flags: new Map(),
+    ghosts: []
+  };
+  try {
+    // vendredi de référence : le plus récent vendredi 12h00 déjà atteint (un vendredi
+    // avant midi → celui de la semaine passée : la fenêtre n'est pas encore ouverte).
+    const expected = (() => {
+      const d = new Date(nowT);
+      if (d.getDay() === 5 && d.getHours() < 12) d.setDate(d.getDate() - 1);
+      d.setDate(d.getDate() - (d.getDay() + 2) % 7);
+      return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    })();
+    let base = null;
+    try {
+      base = JSON.parse(localStorage.getItem(TVDIFF_KEY) || "null");
+    } catch (e2) {}
+    const tot143 = Object.keys(allEvents || {}).reduce((s, p) => s + (allEvents[p] || []).length, 0);
+    if (nowT.getDay() === 5 && nowT.getHours() >= 12 && (!base || base.friday !== expected) && tot143 >= 100) {
+      // fenêtre ven 12h-24h + garde anti base vide
+      const ser = {};
+      for (const p of Object.keys(allEvents)) ser[p] = (allEvents[p] || []).filter(e => e.summary !== "Vide").map(e => ({
+        k: tvDiffKey143(e, p),
+        t: e.start.getTime(),
+        u: e.end.getTime(),
+        l: e.location || ""
+      }));
+      try {
+        localStorage.setItem(TVDIFF_KEY, JSON.stringify({
+          friday: expected,
+          evs: ser
+        }));
+      } catch (e2) {}
+      base = {
+        friday: expected,
+        evs: ser
+      };
+    }
+    if (!base || base.friday !== expected || !base.evs) return out; // pas de baseline cette semaine → AUCUN badge
+    out.on = true;
+    for (const p of Object.keys(allEvents)) {
+      const byK = {};
+      for (const r of base.evs[p] || []) (byK[r.k] = byK[r.k] || []).push(r);
+      for (const g of Object.keys(byK)) byK[g].sort((a, b) => a.t - b.t);
+      const used = {};
+      for (const e of (allEvents[p] || []).filter(x => x.summary !== "Vide")) {
+        const k = tvDiffKey143(e, p);
+        const grp = byK[k] || [];
+        let bi = -1,
+          bd = Infinity; // appariement au START le plus proche (un déplacé reste le même créneau)
+        for (let i = 0; i < grp.length; i++) {
+          if (used[k + "#" + i]) continue;
+          const d2 = Math.abs(grp[i].t - e.start.getTime());
+          if (d2 < bd) {
+            bd = d2;
+            bi = i;
+          }
+        }
+        if (bi < 0) {
+          out.flags.set(e, true);
+          continue;
+        } // AJOUTÉ (aucune contrepartie dans la base)
+        used[k + "#" + bi] = true;
+        const r = grp[bi];
+        if (e.start.getTime() + "|" + e.end.getTime() + "|" + (e.location || "") !== r.t + "|" + r.u + "|" + r.l) out.flags.set(e, true); // MODIFIÉ / DÉPLACÉ
+      }
+      for (const g of Object.keys(byK)) byK[g].forEach((r, i) => {
+        if (!used[g + "#" + i]) out.ghosts.push({
+          p,
+          gs: (g.split("|")[2] || "").split("+").filter(Boolean),
+          start: new Date(r.t),
+          end: new Date(r.u)
+        });
+      }); // SUPPRIMÉ → fantôme
+    }
+  } catch (e3) {}
+  return out;
+}
 function Kiosk132({
   allEvents,
   lastSync,
@@ -2359,6 +2460,9 @@ function Kiosk132({
       isToday: sameDay(day, new Date(refT))
     };
   }, [allEvents, refT]);
+  // SUITE 143 : diff vs baseline vendredi 12h — les FLAGS sont indexés par OBJET
+  // événement de allEvents (capturés au même rendu, identité garantie).
+  const tvdiff143 = useMemo(() => tvDiff143(allEvents, nowT), [allEvents, nowT]);
 
   // ---- géométrie de la scène (1920×1080, SUITE 134 : scale AUTO bidirectionnel) ----
   const scale = Math.min(vp.w / 1920, vp.h / 1080);
@@ -2532,7 +2636,24 @@ function Kiosk132({
           style: {
             fontSize: 10
           }
-        }, "en cours"), c.badge && /*#__PURE__*/React.createElement("div", {
+        }, "en cours"), tvdiff143.flags.get(e) && /*#__PURE__*/React.createElement("div", {
+          className: "absolute pointer-events-none",
+          style: {
+            top: 2,
+            right: 2,
+            transform: "rotate(-8deg)",
+            color: "#f59e0b",
+            border: "3px solid #f59e0b",
+            borderRadius: 8,
+            padding: "1px 8px",
+            fontSize: 15,
+            fontWeight: 900,
+            textTransform: "uppercase",
+            letterSpacing: ".04em",
+            background: "rgba(15,23,42,.85)",
+            zIndex: 7
+          }
+        }, "✎ modifié"), c.badge && /*#__PURE__*/React.createElement("div", {
           className: "mx-auto w-fit font-bold text-slate-900 bg-slate-100 rounded px-1 leading-tight",
           style: {
             fontSize: isNow ? 12 : 10
@@ -2558,6 +2679,41 @@ function Kiosk132({
             fontSize: isNow ? "clamp(15px,10cqh,19px)" : "clamp(13px,9cqh,17px)"
           }
         }, e.teacher));
+      }), tvdiff143.on && tvdiff143.ghosts.filter(gh => gh.p === q.p && sameDay(gh.start, z.day) && (k132.pm ? gh.start.getHours() * 60 + gh.start.getMinutes() >= TV_SPLIT : gh.start.getHours() * 60 + gh.start.getMinutes() < TV_SPLIT)).map((gh, gi) => {
+        const gLeaves143 = tvGhostLeaves143(gh.gs, q.leaves);
+        let gc0 = q.leaves.indexOf(gLeaves143[0]);
+        if (gc0 < 0) gc0 = 0;
+        let gc1 = q.leaves.indexOf(gLeaves143[gLeaves143.length - 1]);
+        if (gc1 < gc0) gc1 = q.leaves.length - 1;
+        const gTop143 = (gh.start.getHours() + gh.start.getMinutes() / 60 - z.min) * rowH;
+        const gH143 = Math.max((gh.end - gh.start) / 36e5 * rowH - 4, 16);
+        return /*#__PURE__*/React.createElement("div", {
+          key: "gh143-" + gi,
+          className: "absolute",
+          style: {
+            top: gTop143 + 2,
+            height: gH143,
+            left: "calc(" + unit * gc0 + "% + 1.5px)",
+            width: "calc(" + unit * (gc1 - gc0 + 1) + "% - 3px)",
+            pointerEvents: "none"
+          }
+        }, /*#__PURE__*/React.createElement("div", {
+          className: "absolute",
+          style: {
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%,-50%) rotate(-8deg)",
+            color: "#f59e0b",
+            border: "3px solid #f59e0b",
+            borderRadius: 8,
+            padding: "1px 8px",
+            fontSize: 15,
+            fontWeight: 900,
+            textTransform: "uppercase",
+            letterSpacing: ".04em",
+            background: "rgba(15,23,42,.7)"
+          }
+        }, "✎ modifié"));
       }));
     })));
   };
