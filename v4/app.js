@@ -2123,6 +2123,14 @@ const bilanSaveCfg137 = j => {
 // prépare les données au premier lancement, le pré-cache SW (suite 128) garde
 // l'écran lisible hors ligne.
 const TV_ABBR = [["Thermodynamique", "Thermo"], ["thermodynamique", "thermo"], ["Machines thermiques", "Mach. therm."], ["Mécanique vibratoire", "Méca. vib."], ["Mécanique", "Méca."], ["Vibrations", "Vib."], ["Vibratoire", "Vib."], ["Optique ondulatoire", "Opt. ondul."], ["Optique", "Opt."], ["Transferts thermiques", "Transf. therm."], ["Transferts", "Transf."], ["Chaîne de mesure", "Chaîne mes."], ["Instrumentation", "Instru."], ["Métrologie", "Métrol."], ["Matériaux", "Matér."], ["Mathématiques", "Maths"], ["Physique", "Phys."], ["Chimie", "Chim."], ["Électronique", "Électron."], ["Électricité", "Élec."], ["Informatique", "Info."], ["Programmation", "Prog."], ["Probabilités", "Proba."], ["Statistiques", "Stats."], ["Bâtiment", "Bât."], ["Environnement", "Envi."], ["Industrielle", "Indus."], ["expérimentale", "expé."], ["Expérimentale", "Expé."], ["La Fresque du climat", "Fresque climat"], ["Révision", "Rév."], ["Acoustique", "Acou."], ["Application", "Appli."], ["Analyse", "Anal."], ["Modélisation", "Modél."], ["Capteurs", "Capt."], ["Quantique", "Quan."]];
+const ADAPT_CSS_141C = [
+// SUITE 141c : police ADAPTATIVE par container queries — chaque case (cq-case)
+// devient un conteneur CSS ; le texte grossit avec la place réelle, EN TEMPS RÉEL
+// (fenêtre/rotation/split), planchers = tailles historiques (une case d'1 h ne
+// change JAMAIS), plafonds bornés (titre 18 px, horaire 13, secondaires 12).
+// cqh/cqw = % du conteneur ; min() borne aussi par la LARGEUR (une case étroite
+// et haute ne gonfle pas). En clair, le titre passe en graisse 700.
+".cq-case{container-type:size}", ".cq-case .cq-titre{font-size:clamp(11px,min(14cqh,6cqw),18px)!important}", ".cq-case .cq-hor{font-size:clamp(10px,min(10cqh,5cqw),13px)!important}", ".cq-case .cq-sub{font-size:clamp(10px,min(9cqh,4.5cqw),12px)!important}", "html.light .cq-titre{font-weight:700}"].join("\n");
 function tvAbbr(s) {
   // SUITE 132 : abréviation FR des intitulés ADE — règles connues, puis repli (mot > 11 lettres → coupé avec point)
   if (!s) return s;
@@ -2380,7 +2388,7 @@ function Kiosk132({
       style: {
         minHeight: 0
       }
-    }, /*#__PURE__*/React.createElement("style", null, THEME_VARS_136), /*#__PURE__*/React.createElement("div", {
+    }, /*#__PURE__*/React.createElement("style", null, THEME_VARS_136, ADAPT_CSS_141C), /*#__PURE__*/React.createElement("div", {
       className: "flex border-b-2",
       style: {
         height: HEAD - 14
@@ -2500,7 +2508,7 @@ function Kiosk132({
         const T = Math.max(hgt - 4, 16);
         return /*#__PURE__*/React.createElement("div", {
           key: e.id + "@" + e.start.getTime() + "#" + bi,
-          className: "absolute rounded-lg overflow-hidden text-center " + (isNow ? "z-[6] ring-4 ring-sky-300 shadow-[0_0_26px_8px_rgba(56,189,248,.75)]" : ""),
+          className: "absolute rounded-lg overflow-hidden text-center cq-case " + (isNow ? "z-[6] ring-4 ring-sky-300 shadow-[0_0_26px_8px_rgba(56,189,248,.75)]" : ""),
           style: {
             ...c.style,
             top: top + 2,
@@ -2527,22 +2535,22 @@ function Kiosk132({
         }, c.badge), /*#__PURE__*/React.createElement("div", {
           className: "font-semibold leading-tight line-clamp-2",
           style: {
-            fontSize: isNow ? 19 : 15
+            fontSize: isNow ? "clamp(19px,16cqh,24px)" : "clamp(15px,14cqh,19px)"
           }
         }, tvAbbr(typeTitle(e.summary, c.badge === "TP" && e.end - e.start >= 2 * 36e5 ? null : c.badge, true))), (isNow || T >= 44) && /*#__PURE__*/React.createElement("div", {
           className: "leading-tight",
           style: {
-            fontSize: isNow ? 16 : 14
+            fontSize: isNow ? "clamp(16px,11cqh,20px)" : "clamp(14px,10cqh,17px)"
           }
         }, "\u23F0 " + fmtHM(e.start) + "–" + fmtHM(e.end)), (isNow || T >= 44) && e.location && /*#__PURE__*/React.createElement("div", {
           className: "font-black text-yellow-300 leading-tight truncate",
           style: {
-            fontSize: isNow ? 26 : 22
+            fontSize: isNow ? "clamp(26px,15cqh,34px)" : "clamp(22px,13cqh,28px)"
           }
         }, e.location), (isNow || T >= 76) && e.teacher && /*#__PURE__*/React.createElement("div", {
           className: (isNow ? "" : "opacity-70 ") + "leading-tight truncate",
           style: {
-            fontSize: isNow ? 15 : 13
+            fontSize: isNow ? "clamp(15px,10cqh,19px)" : "clamp(13px,9cqh,17px)"
           }
         }, e.teacher));
       }));
@@ -4743,20 +4751,20 @@ function App() {
           }, bb) : null;
         })();
         const lineTitre130g = /*#__PURE__*/React.createElement("div", {
-          className: "text-[11px] font-semibold leading-tight " + (xl130 ? "min-w-0 line-clamp-3" : "line-clamp-2")
+          className: "text-[11px] font-semibold leading-tight cq-titre " + (xl130 ? "min-w-0 line-clamp-3" : "line-clamp-2")
         }, typeTitle(e.summary, c.badge === "TP" && e.end - e.start >= 2 * 36e5 ? null : c.badge, c.badge === "TP" && e.end - e.start >= 2 * 36e5));
         const lineHoraire130g = (() => {
           const showTime = hgt >= xThT130;
           const loc = slot.kind === "room" ? "" : e.location || "";
           return showTime || loc ? /*#__PURE__*/React.createElement("div", {
-            className: "text-[10px] opacity-80 truncate"
+            className: "text-[10px] opacity-80 truncate cq-hor"
           }, showTime ? fmtHM(e.start) + "–" + fmtHM(e.end) + (loc ? " · " + loc : "") : loc) : null;
         })();
         const lineEnsPC130g = (slot.kind === "promo" || slot.kind === "cours") && hgt >= xThE130 && e.teacher && (() => {
           const ot = !multiTch(e) && !noBadgeEv(e) ? occOf(e, evPromo, "t") : null;
           const zk = xl130 && !multiTch(e) && !noBadgeEv(e) ? occOf(e, evPromo, "k") : null;
           return /*#__PURE__*/React.createElement("div", {
-            className: "text-[10px] opacity-60 leading-tight " + (xl130 ? "line-clamp-2" : "truncate")
+            className: "text-[10px] opacity-60 leading-tight cq-sub " + (xl130 || hgt >= 48 ? "line-clamp-2" : "truncate")
           }, e.teacher, ot ? /*#__PURE__*/React.createElement("span", {
             className: "ml-1 text-[8.5px] font-bold text-slate-900 bg-slate-100 rounded px-0.5"
           }, ot.n, "/", ot.N) : null, zk ? /*#__PURE__*/React.createElement("span", {
@@ -4770,7 +4778,7 @@ function App() {
         const lineGrp130g = hgt >= th36 && (() => {
           const dgs = dispGroups(e, evPromo, slot.kind === "teacher" || slot.kind === "room");
           return dgs.length > 0 ? /*#__PURE__*/React.createElement("div", {
-            className: "text-[10px] opacity-70 leading-tight " + (xl130 ? "line-clamp-2" : "truncate")
+            className: "text-[10px] opacity-70 leading-tight cq-sub " + (xl130 || hgt >= 48 ? "line-clamp-2" : "truncate")
           }, dgs.map((g, gi) => {
             const og = noBadgeEv(e) ? null : occOf(e, evPromo, "g", g);
             return /*#__PURE__*/React.createElement("span", {
@@ -4784,7 +4792,7 @@ function App() {
           const ot = !multiTch(e) && !noBadgeEv(e) ? occOf(e, evPromo, "t") : null;
           const zk = xl130 && !multiTch(e) && !noBadgeEv(e) ? occOf(e, evPromo, "k") : null;
           return /*#__PURE__*/React.createElement("div", {
-            className: "text-[10px] opacity-60 leading-tight " + (xl130 ? "line-clamp-2" : "truncate")
+            className: "text-[10px] opacity-60 leading-tight cq-sub " + (xl130 || hgt >= 48 ? "line-clamp-2" : "truncate")
           }, e.teacher, ot ? /*#__PURE__*/React.createElement("span", {
             className: "ml-1 text-[8.5px] font-bold text-slate-900 bg-slate-100 rounded px-0.5"
           }, ot.n, "/", ot.N) : null, zk ? /*#__PURE__*/React.createElement("span", {
@@ -4796,7 +4804,7 @@ function App() {
           }, "an ", ot.anK, "/", ot.anN) : null);
         })();
         const lineSalleRoom130g = slot.kind === "room" && (e.location || "") && /*#__PURE__*/React.createElement("div", {
-          className: "text-[10px] opacity-80 truncate"
+          className: "text-[10px] opacity-80 truncate cq-hor"
         }, e.location);
         return /*#__PURE__*/React.createElement("button", {
           key: e.id + "@" + e.start.getTime() + "#" + bi,
@@ -4806,7 +4814,7 @@ function App() {
             slotPromo: slot.promo,
             slotKind: slot.kind
           }),
-          className: "absolute rounded-lg text-left overflow-hidden hover:z-10 hover:scale-[1.02] transition shadow " + (xl130 ? "flex gap-3 items-start justify-center " : "") + (hgt >= thE ? "p-1.5" : "p-1"),
+          className: "absolute rounded-lg text-left overflow-hidden cq-case hover:z-10 hover:scale-[1.02] transition shadow " + (xl130 ? "flex gap-3 items-start justify-center " : "") + (hgt >= thE ? "p-1.5" : "p-1"),
           style: {
             ...c.style,
             top: top + 2 + "px",
@@ -4860,7 +4868,7 @@ function App() {
             maxWidth: "55%"
           }
         }, lineBadge130g, lineTitre130g) : [lineBadge130g, lineTitre130g], xl130 ? /*#__PURE__*/React.createElement("div", {
-          className: "flex flex-col items-end text-right",
+          className: "flex flex-col items-end text-right min-w-0",
           style: {
             flex: "none",
             maxWidth: "58%"
@@ -5368,7 +5376,7 @@ function App() {
   });
   return /*#__PURE__*/React.createElement("div", {
     className: "min-h-screen bg-slate-950 text-slate-100 p-3 md:p-6 font-sans"
-  }, /*#__PURE__*/React.createElement("style", null, THEME_VARS_136, LIGHT_CSS_134), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("style", null, THEME_VARS_136, LIGHT_CSS_134, ADAPT_CSS_141C), /*#__PURE__*/React.createElement("div", {
     className: "max-w-[1700px] mx-auto"
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-1.5"
