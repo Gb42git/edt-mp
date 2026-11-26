@@ -802,7 +802,7 @@ function colorFor(ev, promo, kind) {
 }
 function detectType(ev) {
   const s = ev.summary.toLowerCase();
-  if (/examen|partiel|devoir|ctrl|interro|soutenance|1\/3\s*t/.test(s)) return "Examen";
+  if (/examen|partiel|devoir|contr[oô]le|ctrl|interro|soutenance|1\/3\s*t/.test(s)) return "Examen";
   if (/^tp\b|\btp\b/.test(s)) return "TP";
   if (/^td\b|\btd\b/.test(s)) return "TD";
   if (/\bcm\b|amphi/.test(s)) return "CM";
@@ -816,11 +816,16 @@ const INFO_EV_RE = /pr[ée]sentation|élection|election|(^|\s)infos\b|^cem\b|jur
 // (devoir, examen, contrôle, interrogation, soutenance) MAIS PAS « 1/3 temps » :
 // c'est une info pour la surveillante (temps majoré), pas un devoir supplémentaire.
 // Le créneau reste affiché sur l'agenda, il n'apparaît juste pas dans la liste.
+// SUITE 146 : le mot-clé d'évaluation PRIME sur la mention 1/3 temps. Côté MP « 1/3 temps »
+// est un créneau DÉDIÉ (titre seul, info pour la surveillante : toujours exclu), mais côté
+// CiTiSE la mention vit DANS le titre du devoir (« Devoir Chimie (dont 1/3 temps) ») :
+// l'exclusion aveugle vidait la liste des devoirs CiTiSE. Un titre avec mot-clé = devoir,
+// même 1/3 ; la mention SEULE (sans mot-clé) reste exclue (surveillance, pas un devoir).
+const DEVOIR_KW_146 = /(examen|partiel|devoir|contr[oô]le|ctrl|interro|soutenance|(^|\s)ds(\s|$))/;
 const isDevoir = e => {
   const s = (e.summary || "").toLowerCase();
-  if (/1\/3\s*t/.test(s)) return false;
-  if (/(^|\s)ds(\s|$)/.test(s)) return true;
-  return detectType(e) === "Examen";
+  if (/1\/3\s*t/.test(s) && !DEVOIR_KW_146.test(s)) return false;
+  return /(^|\s)ds(\s|$)/.test(s) || detectType(e) === "Examen";
 };
 const noBadgeEv = e => !!e && (detectType(e) === "Examen" || INFO_EV_RE.test(e.summary || ""));
 // Plusieurs enseignants (soutenances, jurys, réunions) : les séries n'ont pas à être comptées.
@@ -2915,6 +2920,10 @@ function Kiosk132({
 // (styles inline, teintes translucides lisibles aussi sur fond clair). Règle de
 // maintenance : une NOUVELLE classe sombre ajoutée à l'appli doit être ajoutée ici
 // pour exister aussi en clair (le journal le rappelle).
+// SUITE 146 : teinte sombre de l'entête du jour courant (vue Semaine) — écho du #e0e7ff
+// du thème clair ; la règle html.light .head-today (plus spécifique) garde la main en clair.
+// Placée EN FIN du bloc style : l'ordre tokens → light → adapt 136/141c est préservé.
+const TODAY_CSS_146 = ".head-today{background:rgba(99,102,241,0.15)}";
 const LIGHT_CSS_134 = ["html.light{color-scheme:light}", "html.light body{background:#eef2f7;color:#1e293b}",
 // SUITE 141 : hiérarchie claire — racine/inputs BLANCS, SURFACES /60 /70 teintées #f8fafc,
 // boutons blancs + ombre portée légère, onglet actif indigo foncé texte blanc (option A).
@@ -4905,7 +4914,7 @@ function App() {
       const laid = layoutDay(shown.filter(e => sameDay(e.start, date)), cols, slot.promo);
       return /*#__PURE__*/React.createElement("div", {
         key: dayIdx,
-        className: "relative border-l border-slate-800 " + (sameDay(date, today) ? "bg-indigo-500/[0.04]" : "") + (vacOf(date) ? " bg-slate-700/30" : "")
+        className: "relative border-l border-slate-800 " + (sameDay(date, today) ? "bg-indigo-500/15" : "") + (vacOf(date) ? " bg-slate-700/30" : "")
       }, hours.map(h => /*#__PURE__*/React.createElement("div", {
         key: h,
         className: "border-b border-slate-800/50",
@@ -5635,7 +5644,7 @@ function App() {
   });
   return /*#__PURE__*/React.createElement("div", {
     className: "min-h-screen bg-slate-950 text-slate-100 p-3 md:p-6 font-sans"
-  }, /*#__PURE__*/React.createElement("style", null, THEME_VARS_136, LIGHT_CSS_134, ADAPT_CSS_141C), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("style", null, THEME_VARS_136, LIGHT_CSS_134, ADAPT_CSS_141C, TODAY_CSS_146), /*#__PURE__*/React.createElement("div", {
     className: "max-w-[1700px] mx-auto"
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-1.5"
