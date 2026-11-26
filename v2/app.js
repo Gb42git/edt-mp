@@ -2727,7 +2727,7 @@ const LIGHT_CSS_134 = ["html.light{color-scheme:light}", "html.light body{backgr
 "html.light .bg-slate-100{background-color:#ffffff}", "html.light .bg-slate-300{background-color:#e2e8f0}", "html.light .bg-slate-500\\/10{background-color:#f1f5f9}", "html.light .bg-slate-600{background-color:#94a3b8}", "html.light .bg-slate-700\\/30{background-color:#f1f5f9}", "html.light .bg-slate-700\\/40{background-color:#e2e8f0}", "html.light .bg-slate-700\\/60{background-color:#e2e8f0}", "html.light .bg-slate-800\\/30{background-color:#f1f5f9}", "html.light .hover\\:bg-slate-800\\/40:hover,html.light .hover\\:bg-slate-800\\/60:hover{background-color:#e2e8f0}", "html.light .border-slate-400\\/30{border-color:#cbd5e1}", "html.light .border-slate-700\\/60{border-color:#e2e8f0}", "html.light .border-slate-800\\/40,html.light .border-slate-800\\/50,html.light .border-slate-800\\/60,html.light .border-slate-800\\/70{border-color:#cbd5e1}", "html.light .hover\\:border-slate-600:hover{border-color:#94a3b8}",
 // Garde-fou suite 135 : les 7 chips de badges (TD_COLOR_CYCLE, fonds bg-X-500/20
 // translucides) portent du texte -100 pâle — assombri pour le mode clair.
-"html.light .text-indigo-100{color:#4338ca}", "html.light .text-emerald-100{color:#047857}", "html.light .text-sky-100{color:#0369a1}", "html.light .text-amber-100{color:#b45309}", "html.light .text-rose-100{color:#be123c}", "html.light .text-teal-100{color:#0f766e}", "html.light .text-violet-100{color:#5b21b6}"].join("\\n");
+"html.light .text-indigo-100{color:#4338ca}", "html.light .text-emerald-100{color:#047857}", "html.light .text-sky-100{color:#0369a1}", "html.light .text-amber-100{color:#b45309}", "html.light .text-rose-100{color:#be123c}", "html.light .text-teal-100{color:#0f766e}", "html.light .text-violet-100{color:#5b21b6}"].join("\n");
 function App() {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [slotQ, setSlotQ] = useState({});
@@ -2888,7 +2888,7 @@ function App() {
     // SUITE 139 : le meta theme-color est piloté par l'APP (indépendant du réglage du
     // téléphone) — #0f172a par défaut (écran d'accès), #eef2f7 quand le clair est actif.
     try {
-      var tc139 = typeof document !== "undefined" && document.querySelector ? document.querySelector('meta[name="theme-color"]') : null;
+      let tc139 = typeof document !== "undefined" && document.querySelector ? document.querySelector('meta[name="theme-color"]') : null;
       if (tc139) tc139.setAttribute("content", light134 ? "#eef2f7" : "#0f172a");
     } catch (e) {}
   }, [light134]);
