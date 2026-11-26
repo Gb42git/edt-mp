@@ -896,6 +896,45 @@ const diffMatch = (it, s) => {
   }
   return false;
 };
+// SUITE 144 : LCA du diff — nœud d'affichage NON REDONDANT d'un item : l'ancêtre
+// commun le plus BAS des groupes touchés dans l'arbre de la promo. Un item sur
+// A1-6 seul vit sur A1-6 (jamais sur A ni BUT1) ; un item touchant tout A vit sur
+// A (jamais sur ses enfants) ; un créneau promo entière (sans groupes) vit sur le
+// NŒUD PROMO (retour null). Les pastilles Δn par nœud n'affichent donc JAMAIS deux
+// fois le même changement, et un frère non touché ne porte rien.
+const diffLcaNode144 = (p, gStr) => {
+  try {
+    const gs = String(gStr || "").split(",").map(x => x.trim()).filter(Boolean);
+    if (!gs.length) return null; // promo entière → nœud promo
+    const tree = (PROMOS[p] || {}).tree || {};
+    const kidsOf = n => tree[n] || [];
+    // SUITE 144 : le LCA porte sur les NŒUDS-GROUPES (pas leurs feuilles) — un « TD
+    // MAE » vit sur la chip MAE, un « TP EA1 » sur la chip EA1 (le nœud que l'étudiant
+    // reconnaît), un groupe hors arbre (étiquette libre) est IGNORÉ.
+    const aff = gs.filter((g, i) => gs.indexOf(g) === i);
+    const pathOf = (leaf, n, acc) => {
+      if (n === leaf) return acc.concat([n]);
+      for (const c of kidsOf(n)) {
+        const r = pathOf(leaf, c, acc.concat([n]));
+        if (r) return r;
+      }
+      return null;
+    };
+    const paths = aff.map(l => pathOf(l, p, [])).filter(Boolean);
+    if (!paths.length) return null; // tous les groupes hors arbre → nœud promo
+    if (!paths.length) return null;
+    let depth = 0;
+    outer: while (paths[0][depth] !== undefined) {
+      const at = paths[0][depth];
+      for (const pa of paths) if (pa[depth] !== at) break outer;
+      depth++;
+    }
+    const r = paths[0][depth - 1];
+    return !r || r === p ? null : r; // LCA = racine → nœud promo
+  } catch (e) {
+    return null;
+  }
+};
 // Suite 86 : sous-type d'un item « mod » — 'room' : salle uniquement (regroupés,
 // repliés par défaut) ; 'ens' : enseignant uniquement (badge « Δ ens. ») ;
 // 'move' : déplacement/titre ; 'legacy' : item stocké AVANT la suite 86 (sans
@@ -5297,6 +5336,54 @@ function App() {
     store(persoKeyOf(persoT108, "ose-fig"), JSON.stringify(v));
   };
   const diffCountFor = s => !diff || !Array.isArray(diff.items) || !s ? 0 : diff.items.filter(it => diffMatch(it, s)).length;
+  // SUITE 144 : pastilles Δn NON REDONDANTES par nœud LCA (promo → groupe →
+  // sous-groupe). Chaque item de diff vit à UN SEUL nœud (l'ancêtre commun le plus
+  // bas de ses groupes ; promo entière → nœud promo) : A1-6 seul ne marque QUE
+  // A1-6, tout-A marque QUE A, le parent et les frères non touchés ne portent
+  // RIEN — zéro surcharge, le nombre total de pastilles = nombre de changements.
+  // Consulter un nœud (clic pastille → modal filtré, comportement 79/86 réutilisé)
+  // le marque « vu » : SA pastille disparaît ; le badge Δ global d'entête et le
+  // modal restent inchangés (suite 71 conservée) jusqu'au prochain ↻.
+  const diffNodes144 = useMemo(() => {
+    const m = {};
+    if (diff && Array.isArray(diff.items)) for (const it of diff.items) {
+      const node = diffLcaNode144(it.p, it.g);
+      const k = it.p + "|" + (node || "");
+      m[k] = (m[k] || 0) + 1;
+    }
+    return m;
+  }, [diff]);
+  const [diffSeen144, setDiffSeen144] = useState(() => {
+    try {
+      const s = load("edt2-diffseen");
+      return s && diff && s.at === diff.at && s.keys ? s.keys : {};
+    } catch (e) {
+      return {};
+    }
+  });
+  useEffect(() => {
+    try {
+      store("edt2-diffseen", null);
+    } catch (e) {}
+    setDiffSeen144({});
+  }, [diff && diff.at]);
+  const diffNodeBadge144 = (p, g) => {
+    const k = p + "|" + (g || "");
+    return diffSeen144[k] ? 0 : diffNodes144[k] || 0;
+  };
+  const diffNodeSeen144 = (p, gs) => {
+    const keys = {
+      ...diffSeen144
+    };
+    for (const g of gs) keys[p + "|" + (g || "")] = true;
+    setDiffSeen144(keys);
+    try {
+      store("edt2-diffseen", {
+        at: diff && diff.at,
+        keys
+      });
+    } catch (e) {}
+  };
   // compteurs CM/TD/TP affichés dans la ligne d'un favori enseignant
   const favStatsEl = s => {
     if (!s || s.kind !== "teacher" || !s.teacher) return null;
@@ -6045,14 +6132,33 @@ function App() {
       className: "px-3 py-2.5 border-b border-slate-800/70"
     }, /*#__PURE__*/React.createElement("div", {
       className: "flex flex-wrap items-center gap-1 mb-1"
-    }, PROMO_KEYS.map(p => /*#__PURE__*/React.createElement("button", {
+    }, PROMO_KEYS.map(p =>
+    /*#__PURE__*/
+    /* SUITE 144 : pastille Δn du NŒUD PROMO (LCA) à côté du bouton —
+       cliquer la pastille ouvre le modal du diff filtré sur la promo et
+       la marque « vue » (le bouton promo lui-même continue à changer de promo). */
+    React.createElement("div", {
       key: p,
+      className: "flex items-center gap-0.5"
+    }, /*#__PURE__*/React.createElement("button", {
       onClick: () => updSlot(slot.id, {
         promo: p,
         groups: PROMOS[p].defaultCols.includes("MA1") ? ["MA1"] : []
       }),
       className: "text-xs font-semibold rounded-lg px-2 py-1 border transition " + (slot.promo === p ? "bg-indigo-400 text-slate-900 border-indigo-400" : "bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500")
-    }, WIDE ? PROMOS[p].label : PROMOS[p].short || PROMOS[p].label))), /*#__PURE__*/React.createElement("div", {
+    }, WIDE ? PROMOS[p].label : PROMOS[p].short || PROMOS[p].label), diffNodeBadge144(p, "") > 0 && /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        diffNodeSeen144(p, [""]);
+        setDiffFilter({
+          kind: "promo",
+          promo: p,
+          groups: []
+        });
+        setShowDiff(true);
+      },
+      title: "Changements ADE qui touchent TOUTE la promo " + PROMOS[p].label + " (" + diffNodeBadge144(p, "") + ") — clic pour le détail",
+      className: "text-[10px] font-medium text-amber-300 bg-amber-400/10 border border-amber-400/40 hover:border-amber-300 rounded-full px-1.5 py-0.5 transition shrink-0"
+    }, "Δ ", diffNodeBadge144(p, ""))))), /*#__PURE__*/React.createElement("div", {
       className: "flex flex-wrap items-center gap-1"
     }, /*#__PURE__*/React.createElement("button", {
       onClick: () => updSlot(slot.id, {
@@ -6072,13 +6178,35 @@ function App() {
     }, cat.label), cat.items.map(g => {
       const gs = g.split("|");
       const on = gs.every(x => slot.groups.includes(x));
-      return /*#__PURE__*/React.createElement("button", {
-        key: g,
-        onClick: () => updSlot(slot.id, {
-          groups: on ? slot.groups.filter(x => !gs.includes(x)) : [...new Set([...slot.groups, ...gs])]
-        }),
-        className: "font-medium rounded-lg px-1.5 py-1 border transition text-[11px] " + (on ? "bg-indigo-400 text-slate-900 border-indigo-400" : "bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500")
-      }, gs.length > 1 ? gs.join("/") : grpDisp(slot.promo, g));
+      const n144 = gs.reduce((s, x) => s + diffNodeBadge144(slot.promo, x), 0);
+      return (
+        /*#__PURE__*/
+        /* SUITE 144 : pastille Δn du NŒUD LCA sur la chip du groupe — A1-6 seul ne
+           marque QUE A1-6, jamais A ni BUT1 ; chip composite (TD A|B) = somme des
+           nœuds du chip. Clic pastille → modal filtré (fermeture de groupes 79/80)
+           + nœud marqué « vu ». Le bouton groupe lui-même sélectionne comme avant. */
+        React.createElement("span", {
+          key: g,
+          className: "flex items-center gap-0.5"
+        }, /*#__PURE__*/React.createElement("button", {
+          onClick: () => updSlot(slot.id, {
+            groups: on ? slot.groups.filter(x => !gs.includes(x)) : [...new Set([...slot.groups, ...gs])]
+          }),
+          className: "font-medium rounded-lg px-1.5 py-1 border transition text-[11px] " + (on ? "bg-indigo-400 text-slate-900 border-indigo-400" : "bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500")
+        }, gs.length > 1 ? gs.join("/") : grpDisp(slot.promo, g)), n144 > 0 && /*#__PURE__*/React.createElement("button", {
+          onClick: () => {
+            diffNodeSeen144(slot.promo, gs);
+            setDiffFilter({
+              kind: "promo",
+              promo: slot.promo,
+              groups: gs
+            });
+            setShowDiff(true);
+          },
+          title: "Changements ADE de ce groupe depuis la dernière synchro (" + n144 + ") — clic pour le détail",
+          className: "text-[10px] font-medium text-amber-300 bg-amber-400/10 border border-amber-400/40 hover:border-amber-300 rounded-full px-1.5 py-0.5 transition shrink-0"
+        }, "Δ ", n144))
+      );
     }))))), viewMode === "periode" ? periodListFor(slot, data.shown) : shownCount === 0 && slot.kind !== "promo" && !slot.teacher && !slot.room && !slot.course ? /*#__PURE__*/React.createElement("div", {
       className: "p-6 text-center text-xs text-slate-500"
     }, "Agenda vide — tapez un cours, une salle, un enseignant ou un groupe dans la barre ci-dessus.") : shownCount === 0 ? (() => {
