@@ -2919,7 +2919,7 @@ function Kiosk132({
             style: bSt
           }, serB.n + "/" + serB.N))));
         })());
-      }), tvdiff143.on && tvdiff143.ghosts.filter(gh => gh.p === q.p && sameDay(gh.start, z.day) && (k132.pm ? gh.start.getHours() * 60 + gh.start.getMinutes() >= TV_SPLIT : gh.start.getHours() * 60 + gh.start.getMinutes() < TV_SPLIT)).map((gh, gi) => {
+      }), tvdiff143.on && tvdiff143.ghosts.filter(gh => gh.p === q.p && sameDay(gh.start, k132.day) && (k132.pm ? gh.start.getHours() * 60 + gh.start.getMinutes() >= TV_SPLIT : gh.start.getHours() * 60 + gh.start.getMinutes() < TV_SPLIT)).map((gh, gi) => {
         const gLeaves143 = tvGhostLeaves143(gh.gs, q.leaves);
         let gc0 = q.leaves.indexOf(gLeaves143[0]);
         if (gc0 < 0) gc0 = 0;
