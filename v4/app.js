@@ -2554,6 +2554,11 @@ function Kiosk132({
     const o = occ148[p + "|" + norm(e.summary) + "|" + serKey(e, p) + "@" + e.start.getTime()];
     return o && o.N > 1 ? o : null;
   };
+
+  // SUITE 148c2 : ADE accole la salle VIRTUELLE à la salle physique (« D302,virtuel_MPH2 »)
+  // — sur l'écran TV, seuls les segments réels sont montrés ; une salle multiple
+  // réelle (« B104,C101 ») reste intacte. TV uniquement, app v2/v3/v4 inchangée.
+  const tvLoc148 = l => (l || "").split(",").map(s => s.trim()).filter(s => s && !/^virtuel[_-]/i.test(s)).join(" ");
   const zoneBlocks = z => {
     // une moitié : grille pleine largeur, colonnes = feuilles des promos de la zone
     if (!z.promos.length) return null;
@@ -2748,6 +2753,7 @@ function Kiosk132({
             style: bSt
           }, serB.n + "/" + serB.N));
           const title = tvAbbr(typeTitle(e.summary, tB === "TP" && e.end - e.start >= 2 * 36e5 ? null : tB, true));
+          const loc148 = tvLoc148(e.location);
           if (T < 44) return /*#__PURE__*/React.createElement("div", {
             className: "flex items-center justify-center gap-1 leading-none whitespace-nowrap"
           }, /*#__PURE__*/React.createElement("span", {
@@ -2760,13 +2766,22 @@ function Kiosk132({
             style: {
               fontSize: "clamp(11px,8cqh,14px)"
             }
-          }, "\u23F0 " + fmtHM(e.start) + "–" + fmtHM(e.end)), e.location && /*#__PURE__*/React.createElement("span", {
+          }, "\u23F0 " + fmtHM(e.start) + "–" + fmtHM(e.end)), loc148 && /*#__PURE__*/React.createElement("span", {
             className: "flex-none font-black text-yellow-300",
             style: {
               fontSize: "clamp(11px,8cqh,15px)"
             }
-          }, e.location), badges);
-          return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+          }, loc148), badges);
+          {/* SUITE 148c2 (recette devoir électrochimie 45 min) : la salle
+              passe en COLONNE À DROITE de la case — pleine hauteur, texte
+              aligné à gauche dedans — dès que l'empilement vertical ne tient
+              pas : cases basses (T < 76) OU salle trop longue pour une ligne
+              (estimation ~0,62 em/caractère vs largeur réelle de la case).
+              Sinon l'empilement historique est conservé. */}
+          const fS148 = Math.min(28, Math.max(22, 0.13 * T));
+          const colW148 = (1920 - 58) * (q.leaves.length / totalLeaves) * ((b.c1 - b.c0 + 1) / (q.leaves.length * b.nsub));
+          const needCol148 = !!loc148 && (T < 76 || loc148.length * fS148 * 0.62 > colW148 * 0.88);
+          const main148 = /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
             className: "font-semibold leading-tight line-clamp-2",
             style: {
               fontSize: isNow ? "clamp(19px,16cqh,24px)" : "clamp(15px,14cqh,19px)"
@@ -2776,12 +2791,12 @@ function Kiosk132({
             style: {
               fontSize: isNow ? "clamp(16px,11cqh,20px)" : "clamp(14px,10cqh,17px)"
             }
-          }, "\u23F0 " + fmtHM(e.start) + "–" + fmtHM(e.end)), e.location && /*#__PURE__*/React.createElement("div", {
-            className: "font-black text-yellow-300 leading-tight " + (T < 76 ? "line-clamp-2" : "truncate"),
+          }, "\u23F0 " + fmtHM(e.start) + "–" + fmtHM(e.end)), !needCol148 && loc148 && /*#__PURE__*/React.createElement("div", {
+            className: "font-black text-yellow-300 leading-tight truncate",
             style: {
               fontSize: isNow ? "clamp(26px,15cqh,34px)" : "clamp(22px,13cqh,28px)"
             }
-          }, e.location), (isNow || T >= 76) && e.teacher && /*#__PURE__*/React.createElement("div", {
+          }, loc148), (isNow || T >= 76) && e.teacher && /*#__PURE__*/React.createElement("div", {
             className: (isNow ? "" : "opacity-70 ") + "leading-tight truncate",
             style: {
               fontSize: isNow ? "clamp(15px,10cqh,19px)" : "clamp(13px,9cqh,17px)"
@@ -2789,6 +2804,19 @@ function Kiosk132({
           }, e.teacher), /*#__PURE__*/React.createElement("div", {
             className: "mx-auto w-fit"
           }, badges));
+          if (!needCol148) return main148;
+          return /*#__PURE__*/React.createElement("div", {
+            className: "flex h-full gap-2"
+          }, /*#__PURE__*/React.createElement("div", {
+            className: "flex-1 min-w-0"
+          }, main148), /*#__PURE__*/React.createElement("div", {
+            className: "flex-none w-fit max-w-[46%] self-stretch flex items-center text-left"
+          }, /*#__PURE__*/React.createElement("span", {
+            className: "font-black text-yellow-300 break-words",
+            style: {
+              fontSize: isNow ? "clamp(26px,15cqh,34px)" : "clamp(22px,13cqh,28px)"
+            }
+          }, loc148)));
         })());
       }), tvdiff143.on && tvdiff143.ghosts.filter(gh => gh.p === q.p && sameDay(gh.start, z.day) && (k132.pm ? gh.start.getHours() * 60 + gh.start.getMinutes() >= TV_SPLIT : gh.start.getHours() * 60 + gh.start.getMinutes() < TV_SPLIT)).map((gh, gi) => {
         const gLeaves143 = tvGhostLeaves143(gh.gs, q.leaves);
@@ -3013,11 +3041,11 @@ function Kiosk132({
 // SUITE 146 : teinte sombre de l'entête du jour courant (vue Semaine) — écho du #e0e7ff
 // du thème clair ; la règle html.light .head-today (plus spécifique) garde la main en clair.
 // Placée EN FIN du bloc style : l'ordre tokens → light → adapt 136/141c est préservé.
-const TODAY_CSS_146 = ".head-today{background:rgba(99,102,241,0.15)}";
+const TODAY_CSS_146 = ".head-today{background:rgba(99,102,241,0.4);color:#eef2ff}";
 const LIGHT_CSS_134 = ["html.light{color-scheme:light}", "html.light body{background:#eef2f7;color:#1e293b}",
 // SUITE 141 : hiérarchie claire — racine/inputs BLANCS, SURFACES /60 /70 teintées #f8fafc,
 // boutons blancs + ombre portée légère, onglet actif indigo foncé texte blanc (option A).
-"html.light .bg-slate-950{background-color:#ffffff}", "html.light .bg-slate-950\\/60,html.light .bg-slate-950\\/70{background-color:#f8fafc}", "html.light .bg-slate-900,html.light .bg-slate-900\\/50,html.light .bg-slate-900\\/60,html.light .bg-slate-900\\/80,html.light .bg-slate-900\\/95{background-color:#ffffff;box-shadow:0 1px 2px rgba(15,23,42,.12)}", "html.light input.bg-slate-950,html.light textarea.bg-slate-950,html.light select.bg-slate-950{box-shadow:inset 0 1px 2px rgba(15,23,42,.07)}", "html.light .bg-indigo-400{background-color:#4338ca}", "html.light .bg-indigo-400.text-slate-900{color:#ffffff}", "html.light button.bg-indigo-400{box-shadow:0 2px 5px rgba(67,56,202,.35)}", "html.light .border-indigo-400{border-color:#4338ca}", "html.light .head-today{background:#e0e7ff}", "html.light .bg-slate-800,html.light .bg-slate-800\\/40,html.light .bg-slate-800\\/60{background-color:#e2e8f0}", "html.light .bg-slate-700,html.light .hover\\:bg-slate-700:hover,html.light .hover\\:bg-slate-800:hover{background-color:#cbd5e1}", "html.light .text-slate-100{color:#0f172a}", "html.light .text-slate-200,html.light .hover\\:text-slate-200:hover{color:#1e293b}", "html.light .text-slate-300{color:#334155}", "html.light .text-slate-400{color:#475569}", "html.light .text-slate-500{color:#64748b}", "html.light .text-slate-600,html.light .text-slate-700{color:#475569}", "html.light .text-amber-300,html.light .text-amber-200{color:#b45309}", "html.light .text-emerald-300{color:#047857}", "html.light .text-sky-300{color:#0369a1}", "html.light .text-rose-300{color:#be123c}", "html.light .text-indigo-300{color:#4338ca}", "html.light .text-teal-300{color:#0f766e}", "html.light .text-violet-300{color:#5b21b6}", "html.light .text-yellow-300{color:#a16207}", "html.light .text-red-400,html.light .text-red-300{color:#b91c1c}", "html.light .border-slate-800,html.light .border-slate-700,html.light .border-slate-600{border-color:#cbd5e1}", "html.light .border-slate-500,html.light .hover\\:border-slate-500:hover{border-color:#94a3b8}", "html.light .border-slate-300{border-color:#cbd5e1}", "html.light .border-slate-100{border-color:#e2e8f0}",
+"html.light .bg-slate-950{background-color:#ffffff}", "html.light .bg-slate-950\\/60,html.light .bg-slate-950\\/70{background-color:#f8fafc}", "html.light .bg-slate-900,html.light .bg-slate-900\\/50,html.light .bg-slate-900\\/60,html.light .bg-slate-900\\/80,html.light .bg-slate-900\\/95{background-color:#ffffff;box-shadow:0 1px 2px rgba(15,23,42,.12)}", "html.light input.bg-slate-950,html.light textarea.bg-slate-950,html.light select.bg-slate-950{box-shadow:inset 0 1px 2px rgba(15,23,42,.07)}", "html.light .bg-indigo-400{background-color:#4338ca}", "html.light .bg-indigo-400.text-slate-900{color:#ffffff}", "html.light button.bg-indigo-400{box-shadow:0 2px 5px rgba(67,56,202,.35)}", "html.light .border-indigo-400{border-color:#4338ca}", "html.light .head-today{background:#e0e7ff;color:#3730a3}", "html.light .bg-slate-800,html.light .bg-slate-800\\/40,html.light .bg-slate-800\\/60{background-color:#e2e8f0}", "html.light .bg-slate-700,html.light .hover\\:bg-slate-700:hover,html.light .hover\\:bg-slate-800:hover{background-color:#cbd5e1}", "html.light .text-slate-100{color:#0f172a}", "html.light .text-slate-200,html.light .hover\\:text-slate-200:hover{color:#1e293b}", "html.light .text-slate-300{color:#334155}", "html.light .text-slate-400{color:#475569}", "html.light .text-slate-500{color:#64748b}", "html.light .text-slate-600,html.light .text-slate-700{color:#475569}", "html.light .text-amber-300,html.light .text-amber-200{color:#b45309}", "html.light .text-emerald-300{color:#047857}", "html.light .text-sky-300{color:#0369a1}", "html.light .text-rose-300{color:#be123c}", "html.light .text-indigo-300{color:#4338ca}", "html.light .text-teal-300{color:#0f766e}", "html.light .text-violet-300{color:#5b21b6}", "html.light .text-yellow-300{color:#a16207}", "html.light .text-red-400,html.light .text-red-300{color:#b91c1c}", "html.light .border-slate-800,html.light .border-slate-700,html.light .border-slate-600{border-color:#cbd5e1}", "html.light .border-slate-500,html.light .hover\\:border-slate-500:hover{border-color:#94a3b8}", "html.light .border-slate-300{border-color:#cbd5e1}", "html.light .border-slate-100{border-color:#e2e8f0}",
 // SUITE 135 : trous de la 134 constatés en recette — text-slate-50 (97 occurrences,
 // texte quasi blanc sur blanc), survols pâles, -200 oubliés, filets slate-950/40,
 // -400 assombris d'un cran pour un contraste WCAG correct sur fond blanc.
@@ -4215,6 +4243,16 @@ function App() {
     ...s,
     ...patch
   } : s));
+  // SUITE 149 : VIDAGE RÉEL des groupes résiduels d'un agenda NON-Étudiant — un
+  // favori enseignant/salle/cours ne doit jamais garder des groupes posés mais
+  // ignorés (boutons du bandeau enfoncés à tort, vu en recette). La promo n'est
+  // volontairement PAS vidée : le bandeau (145) et le compteur (116) s'appuient
+  // dessus ; son bouton s'affiche simplement non-enfoncé (type différent).
+  useEffect(() => {
+    for (const s of slots) if (s.kind !== "promo" && (s.groups || []).length) updSlot(s.id, {
+      groups: []
+    });
+  }, [slots]);
   // Swipe mobile (vue semaine) : balayage horizontal ‹ semaine précédente / › semaine suivante.
   // Seuil ~50 px et déplacement horizontal dominant pour ne pas gêner le défilement vertical.
   const touchRef = useRef(null);
@@ -4958,7 +4996,7 @@ function App() {
       const d = addDays(anchor, i);
       return /*#__PURE__*/React.createElement("div", {
         key: i,
-        className: "border-l border-slate-800 text-center py-0.5 " + (sameDay(d, today) ? "text-indigo-300 head-today" : "text-slate-400")
+        className: "border-l border-slate-800 text-center py-0.5 " + (sameDay(d, today) ? "head-today" : "text-slate-400")
       }, /*#__PURE__*/React.createElement("span", {
         className: "text-[10px] font-semibold"
       }, d.toLocaleDateString("fr-FR", {
@@ -5004,7 +5042,7 @@ function App() {
       const laid = layoutDay(shown.filter(e => sameDay(e.start, date)), cols, slot.promo);
       return /*#__PURE__*/React.createElement("div", {
         key: dayIdx,
-        className: "relative border-l border-slate-800 " + (sameDay(date, today) ? "bg-indigo-500/15" : "") + (vacOf(date) ? " bg-slate-700/30" : "")
+        className: "relative border-l border-slate-800 " + (sameDay(date, today) ? "bg-indigo-500/[0.04]" : "") + (vacOf(date) ? " bg-slate-700/30" : "")
       }, hours.map(h => /*#__PURE__*/React.createElement("div", {
         key: h,
         className: "border-b border-slate-800/50",
@@ -6220,7 +6258,7 @@ function App() {
         promo: p,
         groups: PROMOS[p].defaultCols.includes("MA1") ? ["MA1"] : []
       }),
-      className: "text-xs font-semibold rounded-lg px-2 py-1 border transition " + (slot.promo === p ? "bg-indigo-400 text-slate-900 border-indigo-400" : "bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500")
+      className: "text-xs font-semibold rounded-lg px-2 py-1 border transition " + (slot.kind === "promo" && slot.promo === p ? "bg-indigo-400 text-slate-900 border-indigo-400" : "bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500")
     }, WIDE ? PROMOS[p].label : PROMOS[p].short || PROMOS[p].label), diffNodeBadge144(p, "") > 0 && /*#__PURE__*/React.createElement("button", {
       onClick: () => {
         setDiffFilter({
@@ -6240,7 +6278,7 @@ function App() {
         groups: []
       }),
       title: "Tous les groupes",
-      className: "font-medium rounded-lg px-2 py-1 border transition text-[11px] " + (!slot.groups.length ? "bg-slate-100 text-slate-900 border-slate-100" : "bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500")
+      className: "font-medium rounded-lg px-2 py-1 border transition text-[11px] " + (slot.kind === "promo" && !slot.groups.length ? "bg-slate-100 text-slate-900 border-slate-100" : "bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500")
     }, "Tous"), PROMOS[slot.promo].chips.map(cat =>
     /*#__PURE__*/
     /* flex-wrap sur la catégorie : sans lui, la rangée TP BUT1 (9 boutons, ex. D1318)
@@ -6252,7 +6290,7 @@ function App() {
       className: "hidden sm:inline text-[10px] uppercase tracking-wide text-slate-500"
     }, cat.label), cat.items.map(g => {
       const gs = g.split("|");
-      const on = gs.every(x => slot.groups.includes(x));
+      const on = slot.kind === "promo" && gs.every(x => slot.groups.includes(x));
       const n144 = gs.reduce((s, x) => s + diffNodeBadge144(slot.promo, x), 0);
       return (
         /*#__PURE__*/
