@@ -2811,7 +2811,7 @@ function Kiosk132({
             background: "rgba(15,23,42,.25)",
             zIndex: 7
           }
-        }, "✎ modifié"), " // SUITE 157 : badge translucide", (() => {
+        }, "✎ modifié"), (() => {
           const serB = tvBadge148(e, q.p);
           const tB = c.badge;
           const bSt = {
