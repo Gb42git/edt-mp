@@ -2677,29 +2677,18 @@ function Kiosk132({
           height: rowH,
           borderBottom: "1px solid rgba(30,41,59,.42)"
         }
-      })), k132.isToday && k132.pm === nowMin >= TV_SPLIT && (() => {
-        // trait « maintenant » sur la ½ journée courante
-        const y = (nowMin / 60 - z.min) * rowH;
-        if (y < -2 || y > bodyH + 2) return null;
-        return /*#__PURE__*/React.createElement("div", {
-          className: "absolute left-0 right-0 pointer-events-none",
-          style: {
-            top: y,
-            borderTop: "2px solid rgba(96,165,250,.55)"
-          }
-        });
-      })(), laid.map((b, bi) => {
+      })), laid.map((b, bi) => {
         const e = b.ev;
         const top = (e.start.getHours() + e.start.getMinutes() / 60 - z.min) * rowH;
         const hgt = (e.end - e.start) / 36e5 * rowH;
         const c = colorFor(e, q.p, "promo");
         const w = unit * (b.c1 - b.c0 + 1) / b.nsub;
         const left = unit * b.c0 + w * b.lane;
-        const isNow = k132.isToday && refT >= e.start && refT < e.end; // SUITE 132e : halo (heure naviguée) du créneau en cours
+        const isNow = k132.isToday && refT >= e.start && refT < e.end; // SUITE 150 : voile de progression (heure naviguée) du créneau en cours
         const T = Math.max(hgt - 4, 16);
         return /*#__PURE__*/React.createElement("div", {
           key: e.id + "@" + e.start.getTime() + "#" + bi,
-          className: "absolute rounded-lg overflow-hidden text-center cq-case " + (isNow ? "z-[6] ring-4 ring-sky-300 shadow-[0_0_26px_8px_rgba(56,189,248,.75)]" : ""),
+          className: "absolute rounded-lg overflow-hidden text-center cq-case " + (isNow ? "z-[6]" : ""),
           style: {
             ...c.style,
             top: top + 2,
@@ -2708,17 +2697,19 @@ function Kiosk132({
             width: "calc(" + w + "% - 3px)",
             padding: "3px 5px"
           }
-        }, isNow && /*#__PURE__*/React.createElement("div", {
-          className: "absolute inset-0 pointer-events-none",
-          style: {
-            background: "rgba(255,255,255,.18)"
-          }
-        }), isNow && /*#__PURE__*/React.createElement("div", {
-          className: "absolute top-0 right-0 bg-sky-300 text-slate-900 font-black uppercase rounded-bl-md px-1.5 leading-tight",
-          style: {
-            fontSize: 10
-          }
-        }, "en cours"), tvdiff143.flags.get(e) && /*#__PURE__*/React.createElement("div", {
+        }, isNow && (() => {
+          // SUITE 150 : voile blanc translucide remplissant la case depuis le HAUT, bord bas NET — hauteur lissée par transition 30 s entre les rendus de l'horloge
+          const p150 = Math.max(0, Math.min(1, (refT - e.start) / Math.max(1, e.end - e.start)));
+          return /*#__PURE__*/React.createElement("div", {
+            className: "absolute left-0 right-0 top-0 pointer-events-none",
+            style: {
+              height: Math.round(p150 * T),
+              background: "rgba(255,255,255,.30)",
+              borderBottom: "2px solid rgba(255,255,255,.75)",
+              transition: "height 30s linear"
+            }
+          });
+        })(), tvdiff143.flags.get(e) && /*#__PURE__*/React.createElement("div", {
           className: "absolute pointer-events-none",
           style: {
             top: 2,
