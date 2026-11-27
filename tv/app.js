@@ -2180,6 +2180,12 @@ const ADAPT_CSS_141C = [
 // temps reel, zero JS), remplissage hauteur d'abord, trop-plein rogne au bord
 // sans ellipsis, chaque ligne insécable (break-inside:avoid).
 ".cq-case .infos141e{columns:88px auto;column-fill:auto;column-gap:12px;text-align:left}", ".cq-case .infos141e>div{break-inside:avoid}"].join("\n");
+// SUITE 154 : styles propres au kiosk — (1) FUITE DE HAUTEUR Firefox : la scène
+// 1920×1080 garde sa TAILLE DE LAYOUT même mise à l'échelle (transform scale ne
+// rétrécit pas le flux) → sur un écran logique plus bas que 1080 px le document
+// dépassait, un ASCENSEUR apparaissait à droite et le HAUT de la scène (titre)
+// était rogné ; (2) VAGUE ONDULANTE de la barre de progression globale.
+const KIOSK_CSS_154 = ["html,body{overflow:hidden}", ".gpwave154{position:absolute;right:-16px;top:-5px;width:32px;height:18px;animation:gpwave154 1.4s ease-in-out infinite}", "@keyframes gpwave154{0%,100%{transform:translate(-4px,2px)}50%{transform:translate(4px,-2px)}}"].join("\n");
 function tvAbbr(s) {
   // SUITE 132 : abréviation FR des intitulés ADE — règles connues, puis repli (mot > 11 lettres → coupé avec point)
   if (!s) return s;
@@ -2409,6 +2415,55 @@ function Kiosk132({
     window.addEventListener("resize", on);
     return () => window.removeEventListener("resize", on);
   }, []);
+
+  // SUITE 154 : MENU OPTIONS TV (⚙ en entête) — les réglages de l'écran vivent
+  // sur la TV (localStorage « edt2-tvgrp ») : masquage de PROMOS entières ou de
+  // GROUPES FEUILLES. Clés : hide[promo] (promo entière) / hide[promo|feuille].
+  // PAR DÉFAUT TOUT EST AFFICHÉ (arbre complet pré-coché) ; « Rétablir l'affichage
+  // par défaut » vide la clé. TA2/EA2 : feuilles HYPOTHÉTIQUES de MP-2A (rentrée
+  // 2027) — listées dans l'arbre mais GRISÉES/non cochables tant qu'aucun créneau
+  // de ce groupe n'existe dans les données ; dès qu'ADE les fournit elles
+  // deviennent cochables et la colonne apparaît réellement à l'écran.
+  const HYP_LEAVES_154 = {
+    "MP-2A": ["TA2", "EA2"]
+  };
+  const [tvGrp154, setTvGrp154] = useState(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem("edt2-tvgrp") || "{}");
+      return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+    } catch (e) {
+      return {};
+    }
+  });
+  const [optOpen154, setOptOpen154] = useState(false);
+  const [editFeed154, setEditFeed154] = useState(null); // SUITE 154 : nom du flux en cours d'édition dans le menu Options
+  const [editFeedUrl154, setEditFeedUrl154] = useState("");
+  const [feedTest154, setFeedTest154] = useState(null); // SUITE 154 : { name, state: loading|ok|err, msg } — test du flux AVANT validation
+  const saveGrp154 = n => {
+    setTvGrp154(n);
+    try {
+      localStorage.setItem("edt2-tvgrp", JSON.stringify(n));
+    } catch (e) {}
+  };
+  const grpHidden154 = (p, g) => !!(tvGrp154.hide && (tvGrp154.hide[p] || g != null && tvGrp154.hide[p + "|" + g]));
+  const dataHas154 = useMemo(() => {
+    // SUITE 154 : les groupes hypothétiques existent-ils DÉJÀ dans ADE ?
+    const out = {};
+    for (const p of Object.keys(HYP_LEAVES_154)) {
+      out[p] = {};
+      for (const g of HYP_LEAVES_154[p]) out[p][g] = (allEvents[p] || []).some(e => (e.groups || []).some(x => x === g || String(x).startsWith(g + "-")));
+    }
+    return out;
+  }, [allEvents]);
+  const tvLeaves154 = p => tvLeaves(p).concat((HYP_LEAVES_154[p] || []).filter(g => dataHas154[p] && dataHas154[p][g] && !grpHidden154(p, g))).filter(g => !grpHidden154(p, g));
+  const evVis154 = (e, ls, p) => {
+    const gs = e.groups || [];
+    if (!gs.length) return true;
+    return ls.some(c => {
+      const cc = groupClosure(c, p);
+      return gs.some(g => cc.has(g) || groupClosure(g, p).has(c));
+    });
+  };
   const k132 = useMemo(() => {
     // données de l'écran : jour, ½ journée, promos présentes, zones, bornes horaires (SUITE 132e : sur refT = heure naviguée)
     const halfPm = refT.getHours() * 60 + refT.getMinutes() >= TV_SPLIT;
@@ -2453,12 +2508,17 @@ function Kiosk132({
     // Promos présentes (les ABSENTES sont masquées) puis zones haut/bas : paires
     // inséparables BUT1+CiTiSE1 (haut) / BUT2+CiTiSE2 (bas), le reste vers la moitié
     // la moins chargée (équilibre des colonnes, tie → haut).
-    const present = PROMO_KEYS.filter(p => evs[p].length);
+    // SUITE 154 : promo MASQUÉE (menu Options) ou sans AUCUN créneau sur une
+    // feuille visible → absente de l'écran (les autres s'élargissent).
+    const present = PROMO_KEYS.filter(p => {
+      const ls154 = tvLeaves154(p);
+      return ls154.length && evs[p].some(e => evVis154(e, ls154, p));
+    });
     const PAIRS = [["MP-1A", "CiTiSE1-IUTD"], ["MP-2A", "CiTiSE2-IUTD"]];
     const zones = [[], []];
     for (let z = 0; z < 2; z++) for (const p of PAIRS[z]) if (present.includes(p)) zones[z].push(p);
     const rest = present.filter(p => !PAIRS[0].includes(p) && !PAIRS[1].includes(p));
-    const wOf = p => tvLeaves(p).length;
+    const wOf = p => tvLeaves154(p).length; // SUITE 154 : largeurs sur les feuilles VISIBLES
     rest.slice().sort((a, b) => wOf(b) - wOf(a)).forEach(p => {
       const wa = zones[0].reduce((s, x) => s + wOf(x), 0),
         wb = zones[1].reduce((s, x) => s + wOf(x), 0);
@@ -2466,13 +2526,13 @@ function Kiosk132({
     });
     const zonesData = zones.map(z => {
       const promos = z.map(p => {
-        const leaves = tvLeaves(p);
+        const leaves = tvLeaves154(p);
         return {
           p,
           leaves,
-          evs: evs[p]
+          evs: evs[p].filter(e => evVis154(e, leaves, p))
         };
-      });
+      }); // SUITE 154 : feuilles visibles + créneaux sur ces feuilles uniquement
       let mn = 24,
         mx = 0;
       for (const q of promos) for (const e of q.evs) {
@@ -2503,16 +2563,20 @@ function Kiosk132({
       zones: zonesData,
       isToday: sameDay(day, new Date(refT))
     };
-  }, [allEvents, refT]);
+  }, [allEvents, refT, tvGrp154]); // SUITE 154 : le masquage des groupes (menu Options) reconstruit l'écran
   // SUITE 143 : diff vs baseline vendredi 12h — les FLAGS sont indexés par OBJET
   // événement de allEvents (capturés au même rendu, identité garantie).
   const tvdiff143 = useMemo(() => tvDiff143(allEvents, nowT), [allEvents, nowT]);
 
   // ---- géométrie de la scène (1920×1080, SUITE 134 : scale AUTO bidirectionnel) ----
   const scale = Math.min(vp.w / 1920, vp.h / 1080);
+  // SUITE 154 : position:fixed inset:0 — la scène mise à l'échelle (transform
+  // scale) garde sa TAILLE DE LAYOUT 1920×1080 : sur un écran logique plus bas
+  // (Firefox plein écran, barres natives) le document dépassait → ASCENSEUR à
+  // droite et TITRE rogné en haut. Fixed + overflow:hidden = plus jamais de scroll.
   const stageWrap = {
-    width: "100%",
-    height: "100%",
+    position: "fixed",
+    inset: 0,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -2697,8 +2761,15 @@ function Kiosk132({
             width: "calc(" + w + "% - 3px)",
             padding: "3px 5px"
           }
-        }, isNow && (() => {
-          // SUITE 150 : voile blanc translucide remplissant la case depuis le HAUT, bord bas NET — hauteur lissée par transition 30 s entre les rendus de l'horloge
+        }, (() => {
+          // SUITE 150/154 : voile blanc translucide remplissant la case EN COURS depuis le HAUT, bord bas NET, hauteur lissée par transition 30 s — SUITE 154 : le voile couvre désormais TOUT l'agenda, les créneaux PASSÉS restent voilés à 100 %
+          if (k132.isToday && refT >= e.end) return /*#__PURE__*/React.createElement("div", {
+            className: "absolute left-0 right-0 top-0 bottom-0 pointer-events-none",
+            style: {
+              background: "rgba(255,255,255,.30)"
+            }
+          });
+          if (!isNow) return null;
           const p150 = Math.max(0, Math.min(1, (refT - e.start) / Math.max(1, e.end - e.start)));
           return /*#__PURE__*/React.createElement("div", {
             className: "absolute left-0 right-0 top-0 pointer-events-none",
@@ -2996,6 +3067,17 @@ function Kiosk132({
     }
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => {
+      setOptOpen154(!optOpen154);
+      setEditFeed154(null);
+      setFeedTest154(null);
+    },
+    title: "Options TV : flux ADE (URL remplaçable, test avant validation) et groupes affichés (promos + groupes feuilles, arbre complet pré-coché)",
+    className: "font-black rounded-lg px-2 py-0.5 bg-slate-800 text-slate-300 border border-slate-600 hover:bg-slate-700",
+    style: {
+      fontSize: 15
+    }
+  }, "⚙"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
       try {
         if (onRefresh) onRefresh({
           silent: true
@@ -3033,10 +3115,42 @@ function Kiosk132({
     style: {
       fontSize: 16
     }
-  }, "›")))), k132.empty ? /*#__PURE__*/React.createElement("div", {
+  }, "›")))), /*#__PURE__*/React.createElement("div", {
+    className: "px-3",
+    style: {
+      height: 18,
+      flex: "none"
+    }
+  }, /*#__PURE__*/React.createElement("style", null, KIOSK_CSS_154), /*#__PURE__*/React.createElement("div", {
+    className: "relative rounded-full",
+    style: {
+      height: 8,
+      background: "rgba(255,255,255,.10)"
+    }
+  }, k132.isToday && (() => {
+    const zs154 = k132.zones.filter(z => z.promos.length);
+    if (!zs154.length) return null;
+    const mn154 = Math.min.apply(null, zs154.map(z => z.min)),
+      mx154 = Math.max.apply(null, zs154.map(z => z.max));
+    const f154 = Math.max(0, Math.min(1, (nowT.getHours() * 60 + nowT.getMinutes() - mn154 * 60) / ((mx154 - mn154) * 60)));
+    return /*#__PURE__*/React.createElement("div", {
+      className: "absolute left-0 top-0 bottom-0 rounded-full",
+      style: {
+        width: (f154 * 100).toFixed(2) + "%",
+        background: "linear-gradient(90deg,rgba(148,163,184,.32),rgba(226,232,240,.48))"
+      }
+    }, /*#__PURE__*/React.createElement("svg", {
+      className: "gpwave154",
+      viewBox: "0 0 40 18",
+      preserveAspectRatio: "none"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M0 9 Q10 1 20 9 T40 9 V18 H0 Z",
+      fill: "rgba(226,232,240,.5)"
+    })));
+  })())), k132.empty ? /*#__PURE__*/React.createElement("div", {
     className: "grid",
     style: {
-      height: 990
+      height: 972
     }
   }, /*#__PURE__*/React.createElement("div", {
     className: "place-self-center text-slate-500",
@@ -3046,9 +3160,248 @@ function Kiosk132({
   }, "Aucun créneau à venir dans les 8 prochains jours.")) : /*#__PURE__*/React.createElement("div", {
     className: "flex flex-col gap-2 px-3 pb-2",
     style: {
-      height: 990
+      height: 972
     }
-  }, zoneBlocks(k132.zones[0]), zoneBlocks(k132.zones[1]))));
+  }, zoneBlocks(k132.zones[0]), zoneBlocks(k132.zones[1])), optOpen154 && (() => {
+    const feeds154 = feeds || [];
+    const treeRow154 = (label, on154, toggle154, dis154, tip154) => /*#__PURE__*/React.createElement("label", {
+      className: "inline-flex items-center gap-2 leading-none " + (dis154 ? "opacity-40 cursor-not-allowed" : "cursor-pointer"),
+      style: {
+        fontSize: 17
+      },
+      title: tip154 || ""
+    }, /*#__PURE__*/React.createElement("input", {
+      type: "checkbox",
+      checked: on154,
+      disabled: !!dis154,
+      onChange: toggle154,
+      className: "w-5 h-5 accent-sky-400"
+    }), /*#__PURE__*/React.createElement("span", {
+      className: "font-semibold"
+    }, label));
+    const testFeed154 = async (name, url) => {
+      setFeedTest154({
+        name,
+        state: "loading"
+      });
+      try {
+        const r154 = await fetch(PROXY_URL + encodeURIComponent(url));
+        const t154 = await r154.text();
+        if (!t154.toUpperCase().includes("BEGIN:VCALENDAR")) throw new Error("page invalide (lien mort ?)");
+        setFeedTest154({
+          name,
+          state: "ok"
+        });
+      } catch (e154) {
+        setFeedTest154({
+          name,
+          state: "err",
+          msg: e154 && e154.message || "erreur réseau"
+        });
+      }
+    };
+    return /*#__PURE__*/React.createElement("div", {
+      className: "absolute inset-0 z-50 flex items-center justify-center",
+      style: {
+        background: "rgba(2,6,23,.80)"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "bg-slate-900 border-2 border-slate-600 rounded-2xl px-6 py-5",
+      style: {
+        width: 900,
+        maxHeight: 920,
+        overflowY: "auto"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "flex items-center justify-between mb-3"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "font-extrabold",
+      style: {
+        fontSize: 26
+      }
+    }, "⚙ Options TV"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        setOptOpen154(false);
+        setEditFeed154(null);
+      },
+      className: "font-black rounded-lg px-3 py-0.5 bg-slate-800 text-slate-300 border border-slate-600 hover:bg-slate-700",
+      style: {
+        fontSize: 16
+      }
+    }, "✕ Fermer")), /*#__PURE__*/React.createElement("div", {
+      className: "font-extrabold mb-2",
+      style: {
+        fontSize: 22
+      }
+    }, "Flux ADE"), feeds154.length === 0 && /*#__PURE__*/React.createElement("div", {
+      className: "text-slate-400",
+      style: {
+        fontSize: 15
+      }
+    }, "Aucun flux connu."), feeds154.map(f => {
+      const ov154 = (feedOverrides || {})[f.name];
+      return /*#__PURE__*/React.createElement("div", {
+        key: f.name,
+        className: "mb-2"
+      }, /*#__PURE__*/React.createElement("div", {
+        className: "flex items-center gap-2 flex-wrap"
+      }, /*#__PURE__*/React.createElement("span", {
+        className: "font-bold",
+        style: {
+          fontSize: 16
+        }
+      }, f.name), ov154 && /*#__PURE__*/React.createElement("span", {
+        className: "text-amber-300 font-bold",
+        style: {
+          fontSize: 12
+        }
+      }, "URL remplacée"), feedTest154 && feedTest154.name === f.name && (feedTest154.state === "loading" ? /*#__PURE__*/React.createElement("span", {
+        className: "text-sky-300 font-bold",
+        style: {
+          fontSize: 13
+        }
+      }, "test en cours…") : feedTest154.state === "ok" ? /*#__PURE__*/React.createElement("span", {
+        className: "text-emerald-300 font-bold",
+        style: {
+          fontSize: 13
+        }
+      }, "✓ flux valide") : /*#__PURE__*/React.createElement("span", {
+        className: "text-red-300 font-bold",
+        style: {
+          fontSize: 13
+        },
+        title: feedTest154.msg
+      }, "✗ ", feedTest154.msg || "flux invalide")), editFeed154 === f.name ? /*#__PURE__*/React.createElement("button", {
+        onClick: () => {
+          if (onFeedOverride) onFeedOverride(f.name, editFeedUrl154);
+          setEditFeed154(null);
+        },
+        title: "Enregistre la nouvelle URL (persistée edt2-feed-urls, prime sur feeds.json) puis relance un ↻ pour recharger",
+        className: "font-bold rounded-lg px-2 py-0.5 bg-emerald-500/25 text-emerald-300 border border-emerald-400/60",
+        style: {
+          fontSize: 13
+        }
+      }, "Enregistrer") : /*#__PURE__*/React.createElement("button", {
+        onClick: () => {
+          setEditFeed154(f.name);
+          setEditFeedUrl154(ov154 || f.url || "");
+          setFeedTest154(null);
+        },
+        className: "font-bold rounded-lg px-2 py-0.5 bg-slate-800 text-slate-300 border border-slate-600 hover:bg-slate-700",
+        style: {
+          fontSize: 13
+        }
+      }, ov154 ? "Modifier l'URL" : "Changer l'URL"), editFeed154 !== f.name && /*#__PURE__*/React.createElement("button", {
+        onClick: () => testFeed154(f.name, ov154 || f.url || ""),
+        title: "Télécharge le flux en direct via le proxy et vérifie BEGIN:VCALENDAR — AUCUN changement tant que le flux n'est pas valide",
+        className: "font-bold rounded-lg px-2 py-0.5 bg-sky-500/20 text-sky-300 border border-sky-400/50",
+        style: {
+          fontSize: 13
+        }
+      }, "Tester"), ov154 && editFeed154 !== f.name && /*#__PURE__*/React.createElement("button", {
+        onClick: () => {
+          if (onFeedOverride) onFeedOverride(f.name, "");
+          setEditFeed154(null);
+        },
+        title: "Revient à l'URL officielle (feeds.json / secours embarqué)",
+        className: "font-bold rounded-lg px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-400/50",
+        style: {
+          fontSize: 13
+        }
+      }, "Restaurer l'URL officielle")), editFeed154 === f.name && /*#__PURE__*/React.createElement("div", {
+        className: "flex items-center gap-2 mt-1"
+      }, /*#__PURE__*/React.createElement("input", {
+        value: editFeedUrl154,
+        onChange: ev => setEditFeedUrl154(ev.target.value),
+        className: "flex-1 bg-slate-950 text-slate-100 rounded-lg px-2 py-1 outline-none border border-slate-600",
+        style: {
+          fontSize: 13
+        },
+        placeholder: "URL du flux ICS ADE (anonymous_cal.jsp?data=…)"
+      }), /*#__PURE__*/React.createElement("button", {
+        onClick: () => testFeed154(f.name, editFeedUrl154),
+        className: "font-bold rounded-lg px-2 py-0.5 bg-sky-500/20 text-sky-300 border border-sky-400/50",
+        style: {
+          fontSize: 13
+        }
+      }, "Tester"), /*#__PURE__*/React.createElement("button", {
+        onClick: () => {
+          setEditFeed154(null);
+          setFeedTest154(null);
+        },
+        className: "font-bold rounded-lg px-2 py-0.5 bg-slate-800 text-slate-300 border border-slate-600",
+        style: {
+          fontSize: 13
+        }
+      }, "Annuler")));
+    }), /*#__PURE__*/React.createElement("div", {
+      className: "font-extrabold mt-4 mb-2",
+      style: {
+        fontSize: 22
+      }
+    }, "Groupes affichés"), PROMO_KEYS.map(p => {
+      const ls154 = tvLeaves(p).map(g => [g, false]).concat((HYP_LEAVES_154[p] || []).map(g => [g, true]));
+      const promoOn154 = !grpHidden154(p, null);
+      return /*#__PURE__*/React.createElement("div", {
+        key: p,
+        className: "mb-3"
+      }, treeRow154((PROMOS[p] || {
+        label: p
+      }).label, promoOn154, () => {
+        const n = {
+          hide: {
+            ...(tvGrp154.hide || {})
+          }
+        };
+        if (promoOn154) {
+          n.hide[p] = true;
+          ls154.forEach(pg154 => {
+            n.hide[p + "|" + pg154[0]] = true;
+          });
+        } else {
+          delete n.hide[p];
+          ls154.forEach(pg154 => {
+            delete n.hide[p + "|" + pg154[0]];
+          });
+        }
+        saveGrp154(n);
+      }), /*#__PURE__*/React.createElement("div", {
+        className: "flex flex-wrap gap-x-5 gap-y-1 pl-8"
+      }, ls154.map(([g, hyp154]) => {
+        const alive154 = !hyp154 || !!(dataHas154[p] && dataHas154[p][g]);
+        const dis154 = hyp154 && !alive154 || !promoOn154;
+        return treeRow154(grpDisp(p, g) + (hyp154 ? " (à venir)" : ""), !grpHidden154(p, g), () => {
+          const n = {
+            hide: {
+              ...(tvGrp154.hide || {})
+            }
+          };
+          if (!grpHidden154(p, g)) n.hide[p + "|" + g] = true;else delete n.hide[p + "|" + g];
+          saveGrp154(n);
+        }, dis154, hyp154 && !alive154 ? "Groupe prévu à la rentrée 2027 — cochable dès qu'ADE lui donne des créneaux" : "");
+      })));
+    }), /*#__PURE__*/React.createElement("div", {
+      className: "flex items-center gap-3 mt-4"
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        saveGrp154({});
+      },
+      title: "Recoche tout : promos et feuilles par défaut (vide edt2-tvgrp)",
+      className: "font-bold rounded-lg px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-400/50",
+      style: {
+        fontSize: 15
+      }
+    }, "Rétablir l'affichage par défaut"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        setOptOpen154(false);
+        setEditFeed154(null);
+      },
+      className: "font-black rounded-lg px-4 py-1 bg-sky-500/30 text-sky-300 border border-sky-400/60",
+      style: {
+        fontSize: 16
+      }
+    }, "Fermer"))));
+  })()));
 }
 // ---------- Application ----------
 // SUITE 134 : THÈME CLAIR (option, défaut sombre inchangé) — feuille d'overrides
@@ -5760,7 +6113,10 @@ function App() {
     syncState: syncState,
     busy: busySync,
     feedErrs: feedErrs,
-    onRefresh: refreshIcs
+    onRefresh: refreshIcs,
+    feeds: feeds,
+    feedOverrides: feedOverrides,
+    onFeedOverride: saveFeedOverride
   });
   return /*#__PURE__*/React.createElement("div", {
     className: "min-h-screen bg-slate-950 text-slate-100 p-3 md:p-6 font-sans"
