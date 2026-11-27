@@ -2226,8 +2226,11 @@ const tvIsoW = d => {
 // retour au vendredi suivant — la base court de ven 12h à ven 12h). Identité d'un
 // créneau : promo|intitulé|groupes|enseignant, INDÉPENDANTE de l'horaire (un créneau
 // déplacé reste le même créneau : badge au nouvel emplacement, PAS de fantôme) ;
-// « modifié » = horaire ou salle changée. Le tampon vit hors flux du texte (141c
-// intouchées) et ne couvre jamais la salle (coin haut-droit incliné).
+// « modifié » = horaire ou salle changée. SUITE 159 : le tampon DIT le changement —
+// NOUVEAU (vert) pour un ajouté ; « ✎ nouvel horaire » (ambre) pour un déplacé ;
+// « ✎ nouvelle salle » pour un changement de salle ; « ✎ horaire · salle » pour les
+// deux ; fantôme = « ✗ SUPPRIMÉ » (rouge). Rien n'entre dans le flux du texte
+// interne de la case (141c intouchées) : seul le TEXTE du tampon de coin change.
 const TVDIFF_KEY = "edt2-tvdiff-base";
 const tvDiffKey143 = (e, p) => [p, String(e.summary || "").replace(/\s+/g, " ").trim(), (e.groups || []).join("+"), e.teacher || ""].join("|");
 const tvGhostLeaves143 = (gs, leaves) => {
@@ -2297,12 +2300,22 @@ function tvDiff143(allEvents, nowT) {
           }
         }
         if (bi < 0) {
-          out.flags.set(e, true);
+          out.flags.set(e, {
+            ty: "new"
+          });
           continue;
-        } // AJOUTÉ (aucune contrepartie dans la base)
+        } // AJOUTÉ (aucune contrepartie dans la base) — SUITE 159 : tampon « NOUVEAU » vert
         used[k + "#" + bi] = true;
         const r = grp[bi];
-        if (e.start.getTime() + "|" + e.end.getTime() + "|" + (e.location || "") !== r.t + "|" + r.u + "|" + r.l) out.flags.set(e, true); // MODIFIÉ / DÉPLACÉ
+        const hh159 = e.start.getTime() !== r.t || e.end.getTime() !== r.u; // SUITE 159 : horaire déplacé ?
+        const rm159 = (e.location || "") !== r.l; // SUITE 159 : salle changée ?
+        if (hh159 || rm159) out.flags.set(e, {
+          ty: "mod",
+          hh: hh159,
+          rm: rm159,
+          s: e.start,
+          l: e.location || ""
+        }); // SUITE 159 : le tampon montre le NOUVEL horaire et/ou la NOUVELLE salle (ambre)
       }
       for (const g of Object.keys(byK)) byK[g].forEach((r, i) => {
         if (!used[g + "#" + i]) out.ghosts.push({
@@ -2794,24 +2807,33 @@ function Kiosk132({
               transition: "height 30s linear"
             }
           });
-        })(), tvdiff143.flags.get(e) && /*#__PURE__*/React.createElement("div", {
-          className: "absolute pointer-events-none",
-          style: {
-            top: 2,
-            right: 2,
-            transform: "rotate(-8deg)",
-            color: "#f59e0b",
-            border: "2px solid rgba(245,158,11,.85)",
-            borderRadius: 8,
-            padding: "1px 8px",
-            fontSize: 15,
-            fontWeight: 900,
-            textTransform: "uppercase",
-            letterSpacing: ".04em",
-            background: "rgba(15,23,42,.25)",
-            zIndex: 7
-          }
-        }, "✎ modifié"), (() => {
+        })(), (() => {
+          // SUITE 159 : le tampon DIT le changement (recette 158 : « modifié » sans raison = perturbant)
+          const d159 = tvdiff143.flags.get(e);
+          if (!d159) return null;
+          const isNew159 = d159.ty === "new";
+          const ll159 = (d159.l || "").split(",").map(s2 => s2.trim()).filter(s2 => s2 && !/^virtuel[_-]/i.test(s2)).join(" "); // salle physique seule (148c2)
+          const txt159 = isNew159 ? "Nouveau" : "✎ " + [d159.hh ? fmtHM(d159.s) : null, d159.rm ? ll159 : null].filter(Boolean).join(" · "); // le NOUVEL horaire et/ou la NOUVELLE salle
+          const col159 = isNew159 ? "#22c55e" : "#f59e0b"; // vert = ajouté, ambre = modifié
+          return /*#__PURE__*/React.createElement("div", {
+            className: "absolute pointer-events-none",
+            style: {
+              top: 2,
+              right: 2,
+              transform: "rotate(-8deg)",
+              color: col159,
+              border: "2px solid " + (isNew159 ? "rgba(34,197,94,.85)" : "rgba(245,158,11,.85)"),
+              borderRadius: 8,
+              padding: "1px 8px",
+              fontSize: 15,
+              fontWeight: 900,
+              textTransform: "uppercase",
+              letterSpacing: ".04em",
+              background: "rgba(15,23,42,.25)",
+              zIndex: 7
+            }
+          }, txt159);
+        })(), (() => {
           const serB = tvBadge148(e, q.p);
           const tB = c.badge;
           const bSt = {
@@ -2947,8 +2969,8 @@ function Kiosk132({
             top: "50%",
             left: "50%",
             transform: "translate(-50%,-50%) rotate(-8deg)",
-            color: "#f59e0b",
-            border: "2px solid rgba(245,158,11,.85)",
+            color: "#ef4444",
+            border: "2px solid rgba(239,68,68,.85)",
             borderRadius: 8,
             padding: "1px 8px",
             fontSize: 15,
@@ -2957,7 +2979,7 @@ function Kiosk132({
             letterSpacing: ".04em",
             background: "rgba(15,23,42,.25)"
           }
-        }, "✎ modifié"));
+        }, "✗ Supprimé"));
       }));
     })));
   };
