@@ -2730,10 +2730,10 @@ function Kiosk132({
           const serB = tvBadge148(e, q.p);
           const tB = c.badge;
           const bSt = {
-            fontSize: isNow ? 14 : "clamp(11px,8cqh,14px)",
+            fontSize: "clamp(11px,8cqh,14px)",
             padding: "0 4px",
             borderRadius: 4
-          };
+          }; // SUITE 152 : plus de grossissement isNow — le voile (150) signale le créneau en cours, tous les créneaux d un même type ont la même apparence
           const badges = /*#__PURE__*/React.createElement("span", {
             className: "inline-flex items-center gap-1 leading-none"
           }, tB && /*#__PURE__*/React.createElement("span", {
@@ -2771,51 +2771,51 @@ function Kiosk132({
               Sinon l'empilement historique est conservé. */}
           const fS148 = Math.min(28, Math.max(22, 0.13 * T));
           const colW148 = (1920 - 58) * (q.leaves.length / totalLeaves) * ((b.c1 - b.c0 + 1) / (q.leaves.length * b.nsub));
-          // SUITE 151 (recette : badges TD n/N tronqués sur le TP étroit Crouzet BUT1) :
-          // RÈGLE GÉOMÉTRIQUE UNIQUE — les badges (type + n/N) comptent dans le test de
-          // débordement au même titre que la salle ; ce qui ne tient pas en largeur part
-          // dans la colonne droite AVEC la salle, empilé VERTICALEMENT (une colonne :
-          // la hauteur est la ressource des cases étroites, jamais tronqué).
-          // Ce qui tient (TD/CM larges) garde sa ligne centrée actuelle.
+          // SUITE 152 (recette 151 KO : le vrai débordement était VERTICAL — la pile
+          // titre+horaire+salle+enseignant+badges dépassait de ~5 px sur la case en
+          // cours, la ligne des badges était rognée, le test de largeur ne voyait rien) :
+          // les badges TYPE + n/N quittent DÉFINITIVEMENT la pile verticale et vivent
+          // en COLONNE À DROITE (empilés, collés au bloc infos, sous la salle quand
+          // elle y est) pour TOUTES les cases empilées — seule la mono-ligne (T < 44)
+          // les garde en fin de ligne. La salle garde la règle 148c2 (colonne à droite
+          // si elle ne tient pas). Le grossissement isNow (132f) est retiré : le voile
+          // de progression (150) suffit à repérer le créneau en cours.
           const bTxt151 = (tB || "") + (serB ? serB.n + "/" + serB.N : "");
-          const bW151 = bTxt151.length * 14 * 0.62 + 22;
-          const needCol148 = (!!loc148 || !!bTxt151) && (T < 76 || loc148.length * fS148 * 0.62 + (loc148 ? bW151 : 0) > (colW148 - 10) * 0.88);
+          const needCol148 = !!loc148 && (T < 76 || loc148.length * fS148 * 0.62 > (colW148 - 10) * 0.88);
           const main148 = /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
             className: "font-semibold leading-tight line-clamp-2",
             style: {
-              fontSize: isNow ? "clamp(19px,16cqh,24px)" : "clamp(15px,14cqh,19px)"
+              fontSize: "clamp(15px,14cqh,19px)"
             }
           }, title), /*#__PURE__*/React.createElement("div", {
             className: "leading-tight",
             style: {
-              fontSize: isNow ? "clamp(16px,11cqh,20px)" : "clamp(14px,10cqh,17px)"
+              fontSize: "clamp(14px,10cqh,17px)"
             }
           }, "\u23F0 " + fmtHM(e.start) + "–" + fmtHM(e.end)), !needCol148 && loc148 && /*#__PURE__*/React.createElement("div", {
             className: "font-black text-yellow-300 leading-tight truncate",
             style: {
-              fontSize: isNow ? "clamp(26px,15cqh,34px)" : "clamp(22px,13cqh,28px)"
+              fontSize: "clamp(22px,13cqh,28px)"
             }
-          }, loc148), (isNow || T >= 76) && e.teacher && /*#__PURE__*/React.createElement("div", {
-            className: (isNow ? "" : "opacity-70 ") + "leading-tight truncate",
+          }, loc148), T >= 76 && e.teacher && /*#__PURE__*/React.createElement("div", {
+            className: "opacity-70 leading-tight truncate",
             style: {
-              fontSize: isNow ? "clamp(15px,10cqh,19px)" : "clamp(13px,9cqh,17px)"
+              fontSize: "clamp(13px,9cqh,17px)"
             }
-          }, e.teacher), !needCol148 && /*#__PURE__*/React.createElement("div", {
-            className: "mx-auto w-fit"
-          }, badges));
-          if (!needCol148) return main148;
-          // SUITE 151 : la colonne droite porte la salle ET les badges empilés (colonne
-          // unique, collée au bloc infos — 148c3 conservé), badges jamais tronqués.
+          }, e.teacher));
+          if (!needCol148 && !bTxt151) return main148;
+          // SUITE 152 : colonne droite unique — la salle si elle ne tient pas (148c2),
+          // et TOUJOURS les badges empilés (colonne collée au bloc infos, 148c3 conservé).
           return /*#__PURE__*/React.createElement("div", {
             className: "flex h-full justify-center gap-2"
           }, /*#__PURE__*/React.createElement("div", {
             className: "min-w-0 max-w-full"
           }, main148), /*#__PURE__*/React.createElement("div", {
             className: "flex-none w-fit max-w-[46%] self-stretch flex flex-col justify-center items-start text-left gap-1"
-          }, loc148 && /*#__PURE__*/React.createElement("span", {
+          }, needCol148 && /*#__PURE__*/React.createElement("span", {
             className: "font-black text-yellow-300 break-words",
             style: {
-              fontSize: isNow ? "clamp(26px,15cqh,34px)" : "clamp(22px,13cqh,28px)"
+              fontSize: "clamp(22px,13cqh,28px)"
             }
           }, loc148), bTxt151 && /*#__PURE__*/React.createElement("span", {
             className: "inline-flex flex-col items-start gap-1 leading-none"
