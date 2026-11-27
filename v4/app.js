@@ -2782,6 +2782,15 @@ function Kiosk132({
           // de progression (150) suffit à repérer le créneau en cours.
           const bTxt151 = (tB || "") + (serB ? serB.n + "/" + serB.N : "");
           const needCol148 = !!loc148 && (T < 76 || loc148.length * fS148 * 0.62 > (colW148 - 10) * 0.88);
+          // SUITE 153 (recette 152 : badges TP qui sortaient de la case — la colonne
+          // droite ne tient pas sur les cases étroites) : les badges ne vivent À CÔTÉ
+          // du bloc QUE si la case est assez LARGE (≥ ~52 % de la largeur gardés au
+          // texte) ; sinon ils passent SOUS le bloc, en bas de case — les cases TP
+          // sont grandes en hauteur, on UTILISE la hauteur : plus aucun débordement.
+          const bLen153 = Math.max(tB ? tB.length : 0, serB ? String(serB.n).length + 1 + String(serB.N).length : 0);
+          const bW153 = bLen153 * 14 * 0.62 + 14;
+          const sideW153 = (needCol148 ? loc148.length * fS148 * 0.62 + 8 : 0) + (bTxt151 ? bW153 + 8 : 0);
+          const badgesSide153 = !!bTxt151 && colW148 - sideW153 >= colW148 * 0.52;
           const main148 = /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
             className: "font-semibold leading-tight line-clamp-2",
             style: {
@@ -2802,8 +2811,10 @@ function Kiosk132({
             style: {
               fontSize: "clamp(13px,9cqh,17px)"
             }
-          }, e.teacher));
-          if (!needCol148 && !bTxt151) return main148;
+          }, e.teacher), !badgesSide153 && bTxt151 && /*#__PURE__*/React.createElement("div", {
+            className: "mx-auto w-fit"
+          }, badges));
+          if (!needCol148 && !badgesSide153) return main148;
           // SUITE 152 : colonne droite unique — la salle si elle ne tient pas (148c2),
           // et TOUJOURS les badges empilés (colonne collée au bloc infos, 148c3 conservé).
           return /*#__PURE__*/React.createElement("div", {
@@ -2817,7 +2828,7 @@ function Kiosk132({
             style: {
               fontSize: "clamp(22px,13cqh,28px)"
             }
-          }, loc148), bTxt151 && /*#__PURE__*/React.createElement("span", {
+          }, loc148), badgesSide153 && /*#__PURE__*/React.createElement("span", {
             className: "inline-flex flex-col items-start gap-1 leading-none"
           }, tB && /*#__PURE__*/React.createElement("span", {
             className: "font-bold text-slate-900 bg-slate-100 rounded",
