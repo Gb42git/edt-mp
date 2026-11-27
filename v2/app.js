@@ -1005,7 +1005,659 @@ const grpsOf = c => Array.isArray(c.groups) ? c.groups : typeof c.groups === "st
 const rgNrm = (g, promo) => normLabel(String(g == null ? "" : g), promo) || String(g == null ? "" : g).trim();
 const touchesGroup = (c, g, promo) => {
   const gg = rgNrm(g, promo);
-  const gc = groupClosure(gg,g" && (k === "edt2-favs" || k === "edt2-sources" || k === "edt2-feed-urls" || k === "edt2-fit" || k === "edt2-mp-only" || k === "edt2-perso-ref" || k === "edt2-perso-ref-lines" || k === "edt2-perso-service" || k.indexOf("edt2-perso-") === 0 || k.indexOf("edt2-serhist") === 0 || k.indexOf("edt2-archive-") === 0);
+  const gc = groupClosure(gg, promo);
+  return grpsOf(c).some(h => {
+    const hh = rgNrm(h, promo);
+    return gc.has(hh) || groupClosure(hh, promo).has(gg);
+  });
+};
+// Suite 65 : rÃ©solution ROBUSTE de la promo d'un crÃ©neau. PIÃGE : slotPromo est
+// Â« MP-2A Â» codÃ© dur pour les agendas enseignant/salle/cours â si on s'y fie, la
+// fermeture parent/enfant est calculÃ©e sur le MAUVAIS arbre et le proposeur
+// Â« ne lit pas les groupes parents comme les groupes enfants Â» (crÃ©neaux impossibles).
+// On cherche donc la promo dont l'arbre CONTIENT un des groupes du crÃ©neau (hint prioritaire).
+const promoHasGroup = (g, p) => {
+  g = rgNrm(g, p);
+  if (!p || !PROMOS[p]) return false;
+  if (g === p) return true;
+  const tr = PROMOS[p].tree || {};
+  if (g in tr) return true;
+  for (const k of Object.keys(tr)) if ((tr[k] || []).indexOf(g) >= 0) return true;
+  return !!(PROMO_DERIVED[p] && (PROMO_DERIVED[p].parents || {})[g]);
+};
+// FenÃªtres candidates : semaines affichÃ©es Â±3, lundiâvendredi, 8hâ18h30 par pas de 15 min ;
+// occupÃ© = groupes du crÃ©neau âª enseignant(s) âª salle(s), vacances universitaires exclues ;
+// pause mÃ©ridienne PROTÃGÃE : il doit rester AU MOINS 1h libre entre 12h30 et 13h30
+// (crÃ©neau proposÃ© + cours existants des mÃªmes Ã©tudiants/enseignant/salle) ;
+// coÃ»t = 3/jour d'Ã©cart + Ã©cart horaire â les propositions les plus proches de l'origine d'abord.
+const REPLAN_LUNCH0 = 12.5 * 36e5,
+  REPLAN_LUNCH1 = 13.5 * 36e5,
+  REPLAN_LUNCH_MIN = 36e5;
+// Suite 72 (rÃ¨gles suite 69) : salles ADAPTÃES par promo pour un CM, dans l'ordre de
+// prÃ©fÃ©rence. Petites promos sans contrainte (MAE, AVTECH, CiTiSE) : pas de liste â
+// proposition d'heure seule. Â« F236_indigo Â» = acceptable MAIS signalÃ© (â  indigo).
+const REPLAN_ROOMS = {
+  "MP-1A": ["I002_jaune", "I101_bleu", "F236_indigo"],
+  "MP-2A": ["I002_jaune", "I101_bleu", "E151_blanc", "F236_indigo"],
+  "MP-2A-ALT": ["I002_jaune", "I101_bleu", "E151_blanc", "F236_indigo"],
+  "MP-3A-TECHVIMAT": ["I002_jaune", "E151_blanc", "I101_bleu", "B104"]
+};
+// type rÃ©el d'un crÃ©neau : le titre d'abord, sinon le nommage des groupes (mÃªme
+// heuristique que l'affichage, colorFor/bilanType).
+const evTypeOf = (ev, promo) => {
+  const t = detectType(ev);
+  return t !== "Autre" ? t : INFO_EV_RE.test(ev.summary || "") ? "Autre" : typeHintOf(ev, promo) || "Autre";
+};
+// une salle est-elle libre sur [a, b) pour l'ensemble des crÃ©neaux connus ?
+const roomFreeAt = (evs, room, a, b) => !evs.some(c => {
+  const cs = decDT(c.start).getTime(),
+    ce = decDT(c.end).getTime();
+  if (ce <= a || cs >= b) return false;
+  return (c.location || "").split(",").map(x => x.trim()).includes(room);
+});
+const replanFind = (ev, promo, evs, nowMs) => {
+  const st = decDT(ev.start).getTime(),
+    en = decDT(ev.end).getTime();
+  const dur = en - st;
+  if (!(dur > 0) || dur > 8 * 36e5) return [];
+  // Suite 67 : jamais de proposition dans le passÃ© â un crÃ©neau dÃ©jÃ  commencÃ© ou
+  // antÃ©rieur Ã  Â« maintenant Â» est exclu (nowMs injectable pour les tests).
+  const now = typeof nowMs === "number" ? nowMs : Date.now();
+  if (st < now) return []; // Ã©vÃ©nement passÃ© : rien Ã  proposer
+  const gs = grpsOf(ev);
+  // Suite 72 (rÃ¨gles suite 69) : la salle ne CONTRAINT la recherche que pour un TP
+  // (salle imposÃ©e + dispo vÃ©rifiÃ©e). TD : dispo de salle IGNORÃE (aucune salle dans la
+  // proposition). CM : une salle adaptÃ©e sera PROPOSÃE par crÃ©neau (libre si possible).
+  const ty = evTypeOf(ev, promo);
+  const rooms = ty === "TP" ? (ev.location || "").split(",").map(x => x.trim()).filter(Boolean) : [];
+  const pref = ty === "CM" && REPLAN_ROOMS[promo] || null;
+  const tch = (ev.teacher || "").split(" / ").map(x => x.trim()).filter(Boolean);
+  const busy = evs || []; // le crÃ©neau d'origine RESTE occupÃ© : une proposition ne peut pas chevaucher son propre intervalle
+  const base = startOfWeek(new Date(st));
+  const out = [];
+  for (let wi = -3; wi <= 3; wi++) {
+    const ws = new Date(base.getTime() + wi * 7 * 864e5);
+    for (let di = 0; di < 5; di++) {
+      const day = new Date(ws.getTime() + di * 864e5);
+      day.setHours(0, 0, 0, 0);
+      if (vacOf(day)) continue; // vacances : pas de cours programmÃ©, pas de proposition
+      const d0 = day.getTime(),
+        d1 = d0 + 864e5;
+      const ints = [];
+      for (const c of busy) {
+        const cs = decDT(c.start).getTime(),
+          ce = decDT(c.end).getTime();
+        if (ce <= d0 || cs >= d1) continue;
+        const hit = gs.some(g => touchesGroup(c, g, promo)) || tch.some(t => (c.teacher || "").split(" / ").map(x => x.trim()).includes(t)) || rooms.some(r => (c.location || "").split(",").map(x => x.trim()).includes(r));
+        if (hit) ints.push([Math.max(cs, d0), Math.min(ce, d1)]);
+      }
+      ints.sort((a, b) => a[0] - b[0]);
+      for (let t = d0 + 8 * 36e5; t + dur <= d0 + 18.5 * 36e5; t += 9e5) {
+        if (t < now) continue; // fenÃªtre passÃ©e : interdite (crÃ©neau futur ou du jour)
+        if (Math.abs(t - st) < 9e5) continue; // slot identique Ã  l'origine exclu (l'intervalle d'origine bloque dÃ©jÃ  les chevauchements)
+        if (ints.some(iv => t < iv[1] && iv[0] < t + dur)) continue;
+        // pause mÃ©ridienne : temps libre restant sur [12h30, 13h30] avec le crÃ©neau posÃ©
+        const lz0 = d0 + REPLAN_LUNCH0,
+          lz1 = d0 + REPLAN_LUNCH1;
+        let occL = Math.max(0, Math.min(lz1, t + dur) - Math.max(lz0, t));
+        for (const iv of ints) occL += Math.max(0, Math.min(lz1, iv[1]) - Math.max(lz0, iv[0]));
+        if (lz1 - lz0 - occL < REPLAN_LUNCH_MIN - 1e3) continue; // moins d'1h pour manger â pas de proposition (1h pile = OK)
+        const dd = Math.round(Math.abs(t - st) / 864e5);
+        const hd = Math.abs(t % 864e5 - st % 864e5) / 36e5;
+        // Suite 72 : salle proposÃ©e selon le type â TP : salle d'origine conservÃ©e (dispo
+        // dÃ©jÃ  vÃ©rifiÃ©e via busy) ; CM : 1re salle adaptÃ©e LIBRE de la liste promo
+        // (â  si indigo) sinon heure seule avec alerte ; TD / CM sans liste : pas de salle.
+        let room = null,
+          roomNone = false,
+          roomAlert = false;
+        if (ty === "TP") room = (ev.location || "").split(",").map(x => x.trim()).filter(Boolean).join(", ") || null;else if (pref) {
+          const free = pref.find(r => roomFreeAt(busy, r, t, t + dur));
+          if (free) {
+            room = free;
+            roomAlert = /indigo/i.test(free);
+          } else roomNone = true; // le flux sans salle existe quand mÃªme : proposer quand mÃªme l'heure + alerte
+        }
+        out.push({
+          t,
+          end: t + dur,
+          dd,
+          score: dd * 3 + hd,
+          room,
+          roomNone,
+          roomAlert
+        });
+      }
+    }
+  }
+  out.sort((a, b) => a.score - b.score || a.t - b.t);
+  return out.slice(0, 8);
+};
+// Salle virtuelle (virtuel_MPH1/MPH2, virtuel_ALT, Virtuel amphi, GMP_Virtuel_Ã©quipe...) et
+// enseignant virtuel (ressource ADE posÃ©e sans enseignant) : pictogramme d'alerte en surimpression.
+const virtTags = e => {
+  const hasVirt = x => /virtuel/i.test(String(x || ""));
+  const room = hasVirt(e.location) || (e.groups || []).some(hasVirt);
+  // Â« virtEns Â» : enseignant virtuel ADE (ressource Â« VIRTUEL_MPH2 Â» en majuscules, embarquÃ©e
+  // par le pipeline â distinct de la salle virtuelle Â« virtuel_MPH2 Â» en minuscules).
+  const ens = !!e.virtEns || (e.teacher || "").split(" / ").some(hasVirt) || (e.groups || []).some(g => hasVirt(g) && /(ens|enseignant|prof)/i.test(String(g)));
+  return {
+    room,
+    ens
+  };
+};
+function store(key, val) {
+  try {
+    localStorage.setItem(key, JSON.stringify(val));
+    LS_ERR = false;
+    return true;
+  } catch (e) {
+    LS_ERR = true;
+    return false;
+  }
+} // suite 83 : Ã©chec de stockage (quota, localStorage bloquÃ©) â  silence â signalÃ© dans l'onglet Flux
+let LS_ERR = false; // vrai dÃ¨s qu'une Ã©criture a Ã©chouÃ© depuis le chargement
+function load(key) {
+  try {
+    return JSON.parse(localStorage.getItem(key) || "null");
+  } catch (e) {
+    return null;
+  }
+}
+
+// SUITE 107 : SCHÃMA du stockage local (cloisonnement par annÃ©e). Les clÃ©s ANNUELLES sont des
+// donnÃ©es reconstruites depuis les flux (crÃ©neaux en cache, listes d'Ã©tiquettes, Ã©tats de
+// synchronisation) : quand le schÃ©ma change, elles sont JETÃES et se reconstruisent seules au
+// prochain rafraÃ®chissement. Les prÃ©fÃ©rences et saisies UTILISATEUR (favoris edt2-favs,
+// filtres edt2-mp-only/edt2-fit, rÃ©glages edt2-perso-*, edt2-serhist-*, edt2-feed-urls) ne
+// sont JAMAIS jetÃ©es. Le marqueur edt2-schema identifie la gÃ©nÃ©ration des clÃ©s en place.
+const LS_SCHEMA = 3; // SUITE 108 : bump 2â3 (dÃ©verrouillage multi-collÃ¨gues ; seules les clÃ©s ANNUELLES reconstruisables sont purgÃ©es, les prÃ©fÃ©rences/saisies ne le sont JAMAIS)
+try {
+  if (localStorage.getItem("edt2-schema") !== String(LS_SCHEMA)) {
+    const LS_ANNUAL = ["edt2-sources", "edt2-sync", "edt2-etag", "edt2-feederrs", "edt2-diff", "edt2-slots", "edt2-virtf", "edt2-teachers", "edt2-rooms"]; // reconstruisables depuis les flux
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (typeof k === "string" && (LS_ANNUAL.includes(k) || k.indexOf("edt2-events") === 0)) localStorage.removeItem(k);
+    }
+    localStorage.setItem("edt2-schema", String(LS_SCHEMA));
+  }
+} catch (e) {/* stockage indisponible : ignorÃ© (la suite 83 signalera dans l'onglet Flux) */}
+
+// Colonnes de groupes couvertes par un crÃ©neau : un cours mutualisÃ© (promo entiÃ¨re,
+// option, TD commun) couvre toutes ses colonnes, un crÃ©neau de sous-groupe reste dans la sienne.
+function coveredColumns(ev, cols, promo) {
+  const gs = ev.groups || [];
+  const idxs = [];
+  cols.forEach((c, i) => {
+    const cc = groupClosure(c, promo);
+    if (gs.some(g => cc.has(g) || groupClosure(g, promo).has(c))) idxs.push(i);
+  });
+  return idxs.length ? idxs : cols.map((_, i) => i);
+}
+
+// RÃ©partition des crÃ©neaux : colonnes de groupes + sous-colonnes anti-superposition.
+// Les crÃ©neaux mutualisÃ©s occupent toute la largeur du jour (ou les colonnes qu'ils couvrent).
+function layoutDay(evs, cols, promo) {
+  const sorted = [...evs].sort((a, b) => a.start - b.start || b.end - a.end);
+  const placed = [];
+  let blocks = sorted.flatMap(ev => {
+    const idxs = coveredColumns(ev, cols, promo);
+    const runs = [];
+    let i = 0;
+    while (i < idxs.length) {
+      let j = i;
+      while (j + 1 < idxs.length && idxs[j + 1] === idxs[j] + 1) j++;
+      runs.push({
+        ev,
+        c0: idxs[i],
+        c1: idxs[j]
+      });
+      i = j + 1;
+    }
+    return runs;
+  });
+  // Un bloc multi-colonnes qui en croise un autre d'Ã©tendue diffÃ©rente est Ã©clatÃ©
+  // colonne par colonne : un cours mutualisÃ© ne s'Ã©tale que s'il ne gÃªne aucun crÃ©neau.
+  let split = true;
+  while (split) {
+    split = false;
+    const next = [];
+    for (const b of blocks) {
+      const clash = b.c1 > b.c0 && blocks.some(p => p !== b && (p.c0 !== b.c0 || p.c1 !== b.c1) && p.c0 <= b.c1 && b.c0 <= p.c1 && p.ev.end > b.ev.start && p.ev.start < b.ev.end);
+      if (clash) {
+        for (let c = b.c0; c <= b.c1; c++) next.push({
+          ev: b.ev,
+          c0: c,
+          c1: c
+        });
+        split = true;
+      } else next.push(b);
+    }
+    blocks = next;
+  }
+  // Passe 1 : voie anti-chevauchement (conflit = horaires ET colonnes qui se croisent)
+  blocks.forEach(b => {
+    const conflicts = placed.filter(p => p.c0 <= b.c1 && b.c0 <= p.c1 && p.ev.end > b.ev.start && p.ev.start < p.ev.end);
+    let k = 0;
+    while (conflicts.some(p => p.lane === k)) k++;
+    b.lane = k;
+    placed.push(b);
+  });
+  // Passe 2 : nombre de voies simultanÃ©es, recalculÃ© sur tous les blocs en conflit
+  blocks.forEach(b => {
+    const all = blocks.filter(p => p !== b && p.c0 <= b.c1 && b.c0 <= p.c1 && p.ev.end > b.ev.start && p.ev.start < b.ev.end);
+    b.nsub = 1 + Math.max(b.lane, ...all.map(p => p.lane));
+  });
+  return blocks;
+}
+
+// ---------- DonnÃ©es prÃ©chargÃ©es : capture du flux ADE (09/11/2026) ----------
+// Suite 70 : SÃPARATION CODE/DONNÃES. La base embarquÃ©e (crÃ©neaux, enseignants, salles,
+// date de MAJ) vit dans data/mp-base.json et est INJECTÃE ici Ã  la construction par
+// extract.js (remplace le marqueur ci-dessous). Le robot nocturne GitHub Actions ne
+// rÃ©gÃ©nÃ¨re QUE data/mp-base.json Ã  partir des flux ADE â il ne touche JAMAIS au code.
+// ---------- Agendas enseignants : capture des flux ADE (09/11/2026) ----------
+const EDT_DATA = {"schema":1,"date":"","events":{},"teachers":{},"rooms":{}};
+// SUITE 131 : Ã©tiquette d'origine â chaque crÃ©neau de la base embarquÃ©e porte la promo de son
+// flux ADE (promoSrc) ; les rÃ©solveurs (SynthÃ¨se, plannings, typage) la consultent AVANT toute
+// supposition, pour qu'un groupe ambigu (Â« IUTD1 Â», Â« A Â», Â« ALT1 Â») ne soit JAMAIS rÃ©attribuÃ©
+// Ã  la mauvaise promotion. L'affichage (cases, chips, suggestions) est inchangÃ©.
+const PRELOADED_EVENTS = {};
+for (const pk of Object.keys(EDT_DATA.events || {})) PRELOADED_EVENTS[pk] = (EDT_DATA.events[pk] || []).map(e => e && !e.promoSrc ? {
+  ...e,
+  promoSrc: pk
+} : e);
+const PRELOADED_TEACHERS = EDT_DATA.teachers;
+const PRELOADED_ROOMS = EDT_DATA.rooms;
+const DATA_DATE = EDT_DATA.date;
+// vacances universitaires IUT St-Ã 2026-2027 (calendrier pÃ©dagogique CFVU, jours inclus) ;
+// un jour dedans â sa colonne/semaine est grisÃ©e et porte l'Ã©tiquette (suite 25).
+const VACANCES = [["Toussaint", "2026-10-24", "2026-11-01"], ["NoÃ«l", "2026-12-19", "2027-01-03"], ["Hiver", "2027-02-13", "2027-02-28"], ["Printemps", "2027-04-17", "2027-04-25"], ["Ascension", "2027-05-06", "2027-05-09"]];
+const vacOf = d => {
+  const t = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  for (const [label, s, e] of VACANCES) if (t >= new Date(s).getTime() && t <= new Date(e + "T23:59:59").getTime()) return label;
+  return null;
+};
+const TEACHER_NAMES = Object.keys(PRELOADED_TEACHERS);
+// DÃ©codage date compacte "YYMMDDHHMM" (Paris->UTC Ã  la capture) ; accepte aussi ISO ou Date (imports ICS)
+const decDT = z => z instanceof Date ? z : new Date(typeof z === "string" && z.length === 10 ? "20" + z.slice(0, 2) + "-" + z.slice(2, 4) + "-" + z.slice(4, 6) + "T" + z.slice(6, 8) + ":" + z.slice(8, 10) + ":00Z" : z);
+// Ãtiquettes de branche / groupes ADE -> promotion (pour les pastilles cliquables)
+const ETUD_PROMO = {
+  "ETUD-MP-1A": "MP-1A",
+  "MP-1A": "MP-1A",
+  "ETUD-MP-2A": "MP-2A",
+  "MP-2A": "MP-2A",
+  "ETUD-MP-2A-ALT": "MP-2A-ALT",
+  "MP-2A-ALT": "MP-2A-ALT",
+  "ETUD-MP-3A": "MP-3A-MAE",
+  "MP-3A-MAE": "MP-3A-MAE",
+  "ETUD-MP-3A-DU TECHVIMAT": "MP-3A-TECHVIMAT",
+  "MP-3A-TECHVIMAT": "MP-3A-TECHVIMAT",
+  "ETUD-MP-3A-DU AVTECH": "MP-3A-AVTECH",
+  "MP-3A-AVTECH": "MP-3A-AVTECH",
+  "ETUD-CITISE1-IUTD": "CiTiSE1-IUTD",
+  "ETUD-CITISE2-IUTD": "CiTiSE2-IUTD"
+};
+// SUITE 131 : promo D'ORIGINE d'un crÃ©neau (promoSrc = promo du flux ADE) ou null.
+// ATTENTION : PROMOS[x] est l'OBJET de configuration â il sert ICI de simple test de validitÃ©,
+// on renvoie TOUJOURS la CLÃ (chaÃ®ne) ; pousser l'objet dans une clÃ© de sÃ©rie (Â« p + "|"â¦ Â»)
+// fabrique Â« [object Object]|â¦ Â» et casse les badges/dÃ©ficits (piÃ¨ge rencontrÃ© en 131).
+const promoSrcOf = ev => ev && ev.promoSrc && PROMOS[ev.promoSrc] ? ev.promoSrc : null;
+function promoOfGroup(g, preferred) {
+  if (!g) return null;
+  const ep = ETUD_PROMO[g.toUpperCase()];
+  if (ep) return ep;
+  if (preferred && PROMOS[preferred]) {
+    const tr = PROMOS[preferred].tree;
+    for (const k of Object.keys(tr)) if ((tr[k] || []).indexOf(g) >= 0) return preferred;
+  }
+  for (const p of PROMO_KEYS) {
+    const tr = PROMOS[p].tree;
+    for (const k of Object.keys(tr)) if ((tr[k] || []).indexOf(g) >= 0) return p;
+  }
+  return null;
+}
+const prettyName = n => (n || "").toLowerCase().replace(/(^|[\s'\-])([a-zÃ -Ã¶Ã¸-Ã¿])/g, (m, p, c) => p + c.toUpperCase());
+// nom d'affichage : prettyName pour une personne, libellÃ© brut (VIRTUEL_MPH2) pour une ressource virtuelle
+const dispName = n => /virtuel/i.test(String(n || "")) ? String(n) : prettyName(n);
+const norm = s => (s || "").toLowerCase().replace(/\s+/g, " ").trim();
+// AgrÃ©gats virtuels : Â« Enseignant virtuel Â» / Â« Salle virtuelle Â» = ressources synthÃ©tiques qui
+// fusionnent tous les crÃ©neaux des ressources virtuelles (enseignants VIRTUEL_*, salles contenant
+// Â« virtuel Â»). Elles remontent en tÃªte des suggestions Â« virtuel Â» (plus grave de manquer
+// d'enseignant que de salle â une autre salle se trouve au dernier moment).
+const VIRT_ENS_LABEL = "Enseignant virtuel";
+const VIRT_ROOM_LABEL = "Salle virtuelle";
+const isVirtEnsKey = t => /^VIRTUEL/i.test(String(t || ""));
+// salle virtuelle = distanciel ; Â« Ã©quipement(s) virtuel(s) Â» = resource CAO posÃ©e par un
+// collÃ¨gue sur des TP bien prÃ©sentiels (D103 CAOâ¦) : PAS du distanciel, hors dÃ©tection.
+const isVirtRoomKey = r => {
+  const s = String(r || "");
+  return /virtuel/i.test(s) && !/equipement/i.test(s);
+};
+// compteur dÃ©doublonnÃ© des crÃ©neaux d'un agrÃ©gat virtuel (clÃ© = horodatage + titre)
+const virtAggCount = (src, kind) => {
+  const seen = new Set();
+  if (kind === "ens") {
+    for (const t of Object.keys(src)) if (isVirtEnsKey(t)) for (const e of src[t] || []) seen.add(decDT(e.start).getTime() + "|" + (e.summary || ""));
+  } // suite 94 : clÃ© decDT (compact â ISO)
+  else {
+    for (const r of Object.keys(src)) if (isVirtRoomKey(r)) for (const e of src[r] || []) seen.add(String(e[0]) + "|" + e[2]);
+  }
+  return seen.size;
+};
+// catÃ©gorie d'un crÃ©neau pour les boutons on/off des agendas virtuels : CM/TD/TP (le plus
+// critique : un vrai enseignant est attendu), Devoirs/Examens (une surveillante suffit),
+// Autres (ACD, infos, rÃ©unions, prÃ©sentations : normal sans enseignant).
+// ----------
+// Suite 92 : moteur de calcul du Â« Bilan de service Â» (rÃ¨gle OSE prorata).
+// LivrÃ© FIGÃ et testÃ© par le chat Â« Bilan de service Â» (bilan-module/bilan-engine.js) :
+// seule l'enveloppe UMD est remplacÃ©e par une IIFE (navigateur + harnais check8),
+// LE CORPS DE FABRIQUE EST EMBARQUÃ OCTET PAR OCTET. Toute modification de la rÃ¨gle
+// = suite dÃ©diÃ©e + revalidation des rÃ©fÃ©rences 2025-2026 (SUITE 114 : base prorata ENSEIGNEMENT SEUL â 559,91 Ã©qTD / r = 83,52 %).
+const BilanEngine = function () {
+  "use strict";
+
+  const SERVICE = 384; // h Ã©qTD statutaires
+  const TP_HC = 2 / 3; // part HC des TP payÃ©e en dehors du service
+
+  // isoLocal : clÃ© ISO depuis les composants LOCAUX de la date.
+  // PiÃ¨ge connu : toISOString() dÃ©cale d'un jour en heure d'Ã©tÃ© â interdit ici.
+  function isoLocal(d) {
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+
+  // monday: lundi de la semaine contenant d (date locale).
+  function monday(d) {
+    const m = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    m.setDate(m.getDate() - (m.getDay() + 6) % 7);
+    return m;
+  }
+
+  /* buildYear â fabrique une annÃ©e de calcul.
+   * cfg = { start:[a,m,j] lundi de la semaine 1, nw: nombre de semaines (â45),
+   *         weeks: { "YYYY-MM-DD(lundi)": {cm, td, tp, byPromo:{promo:h}} },
+   *         refTotal: nombre | () => nombre   (rÃ©fÃ©rentiel, socle dÃ¨s le 1áµÊ³ sept.) }
+   * weeks peut Ãªtre null/{} (annÃ©e vide, ex. prÃ©-rentrÃ©e). */
+  function buildYear(cfg) {
+    const START = new Date(cfg.start[0], cfg.start[1], cfg.start[2]);
+    const NW = cfg.nw;
+    const refAt = typeof cfg.refTotal === "function" ? cfg.refTotal : () => cfg.refTotal;
+    // Suite 93 : service statutaire PARAMÃTRABLE (384 par dÃ©faut, inchangÃ© ; ex. 192 pour un
+    // collÃ¨gue). La rÃ¨gle OSE elle-mÃªme (coefficients, prorata, part HC des TP Ã2/3) est
+    // INTACTE : seul le seuil de saturation change.
+    const SERVICE_Y = cfg.service && cfg.service > 0 ? cfg.service : SERVICE;
+    const WEEKS = [];
+    for (let i = 0; i < NW; i++) {
+      const d = new Date(START);
+      d.setDate(START.getDate() + i * 7);
+      const raw = cfg.weeks && cfg.weeks[isoLocal(d)] || {
+        cm: 0,
+        td: 0,
+        tp: 0,
+        byPromo: {}
+      };
+      const cm = raw.cm || 0,
+        td = raw.td || 0,
+        tp = raw.tp || 0;
+      WEEKS.push({
+        i,
+        date: d,
+        cm,
+        td,
+        tp,
+        byPromo: raw.byPromo || {},
+        tot: cm + td + tp
+      });
+    }
+    const CUM = [];
+    let cm = 0,
+      td = 0,
+      tp = 0;
+    WEEKS.forEach(w => {
+      cm += w.cm;
+      td += w.td;
+      tp += w.tp;
+      CUM.push({
+        cm,
+        td,
+        tp,
+        tot: cm + td + tp
+      });
+    });
+    const withData = WEEKS.filter(w => w.tot > 0);
+    return {
+      NW,
+      WEEKS,
+      CUM,
+      maxWeek: Math.max(1, ...WEEKS.map(w => w.tot)),
+      meanWeek: withData.length ? withData.reduce((s, w) => s + w.tot, 0) / withData.length : 0,
+      refAt,
+      /* oseAt(i) : instantanÃ© OSE Ã  la fin de la semaine i. */
+      oseAt(i) {
+        const c = CUM[i],
+          ref = refAt(i);
+        const E = 1.5 * c.cm + c.td + c.tp + ref; // Ã©qTD connus (enseignement + rÃ©fÃ©rentiel)
+        const ensTD114 = 1.5 * c.cm + c.td + c.tp; // SUITE 114 : ENSEIGNEMENT SEUL â base du prorata (rÃ¨gle IUT/OSE : le rÃ©fÃ©rentiel s'ajoute APRÃS ; si l'enseignement ne suffit pas au service, r = 1 (aucune HC, TP x1) et le rÃ©fÃ©rentiel comble)
+        const r = ensTD114 > 0 ? Math.min(1, SERVICE_Y / ensTD114) : 1; // prorata service â SUITE 114 : base enseignement seul, rÃ©fÃ©rentiel EXCLU
+        const tpRate = r + (1 - r) * TP_HC; // 1 h TP â tpRate Ã©qTD
+        const paidCours = 1.5 * c.cm + c.td + c.tp * tpRate;
+        return {
+          E,
+          ensTD114,
+          r,
+          tpRate,
+          paidCours,
+          ref,
+          paid: paidCours + ref,
+          saturated: E >= SERVICE_Y
+        }; // SUITE 127 : saturation au SEUIL PARAMÃTRABLE (bug 384 en dur corrigÃ©)
+      },
+      /* satWeekAt : 1Ê³áµ semaine oÃ¹ 384 Ã©qTD atteints cours+rÃ©f (â ambre).
+       * satCoursAt : 384 avec les cours SEULS, 1,5Â·CM+TD+TP (â bleue). -1 = jamais. */
+      satWeekAt: () => CUM.findIndex((c, j) => 1.5 * c.cm + c.td + c.tp + refAt(j) >= SERVICE_Y),
+      satCoursAt: () => CUM.findIndex(c => 1.5 * c.cm + c.td + c.tp >= SERVICE_Y),
+      isoLocal,
+      monday
+    };
+  }
+
+  /* classifType â classification d'un crÃ©neau ADE en cm/td/tp/"exclu".
+   * RÃ©utilise la mÃªme heuristique que le canvas (validÃ©e 25-26 sur les 210
+   * crÃ©neaux d'enseignement retenus) :
+   *  - Exam/DS/partiel/soutenance â "exclu" (jamais comptÃ©s, jamais payÃ©s) ;
+   *  - prÃ©fixes explicites TP/TD/CM (ou amphi) ;
+   *  - cours nus sans prÃ©fixe (Thermodynamique, Acoustique, Optique, MÃ©ca Vibâ¦) â cm ;
+   *  - info/rÃ©union/JPO/prÃ©SENTATION/jury â "exclu" (56 h de rÃ©unions 25-26 non comptÃ©es).
+   * L'HÃTE PEUT passER sa propre fonction de classification (detectType de la v4) ;
+   * celle-ci n'est qu'un repli cohÃ©rent. */
+  const RX_EXAM = /partiel|examen|^ds\b|devoir|interro|contrÃ´le|soutenance/i;
+  const RX_INFO = /rÃ©union|reunion|jury|jpo|pr[Ã©e]sentation|Ã©lection|(^|\s)infos?\b|^cem\b/i;
+  function classifType(summary) {
+    const s = (summary || "").trim();
+    if (RX_EXAM.test(s) || RX_INFO.test(s)) return "exclu";
+    if (/\btp\b|^tp\b/i.test(s)) return "tp";
+    if (/\btd\b|^td\b/i.test(s)) return "td";
+    if (/\bcm\b|amphi/i.test(s)) return "cm";
+    return "cm"; // cours nu = CM
+  }
+
+  /* aggregate â construit weeks{} depuis une liste de crÃ©neaux ADE.
+   * events : [{ summary, start: Date (locale de l'evt ADE "pseudo-UTC" â
+   *   reconvertie par l'hÃ´te), end: Date, promo, groups }]
+   * Attention : les timestamps ADE sont en Â« pseudo-UTC Â» (07:30Z = 09:30 local
+   * Saint-Ãtienne). L'HÃTE fournit des Date dÃ©jÃ  ramenÃ©es en local avant l'appel.
+   * Renvoie { "YYYY-MM-DD": {cm,td,tp,byPromo} }. */
+  function aggregate(events, classif) {
+    const cf = classif || classifType;
+    const weeks = {};
+    for (const e of events) {
+      const t = cf(e.summary);
+      if (t === "exclu") continue;
+      const h = (e.end - e.start) / 3600000;
+      if (!(h > 0)) continue;
+      const iso = isoLocal(monday(e.start));
+      const w = weeks[iso] || (weeks[iso] = {
+        cm: 0,
+        td: 0,
+        tp: 0,
+        byPromo: {}
+      });
+      w[t] += h;
+      const p = e.promo || "?";
+      w.byPromo[p] = (w.byPromo[p] || 0) + h;
+    }
+    // arrondi au centiÃ¨me pour Ã©viter les artefacts flottants
+    for (const iso of Object.keys(weeks)) {
+      const w = weeks[iso];
+      w.cm = Math.round(w.cm * 100) / 100;
+      w.td = Math.round(w.td * 100) / 100;
+      w.tp = Math.round(w.tp * 100) / 100;
+      for (const p of Object.keys(w.byPromo)) w.byPromo[p] = Math.round(w.byPromo[p] * 100) / 100;
+    }
+    return weeks;
+  }
+  return {
+    SERVICE,
+    buildYear,
+    aggregate,
+    classifType,
+    isoLocal,
+    monday
+  };
+}();
+
+// SUITE 137 : l'annÃ©e 2025-2026 figÃ©e n'est PLUS EMBARQUÃE ici (donnÃ©es nominatives
+// retirÃ©es du code, archives canoniques sauvÃ©es dans /confidentiel/ du dÃ©pÃ´t privÃ©).
+// Tout enseignant restaure SON onglet Â« 2025-2026 Â· figÃ©e Â» en important SON archive
+// JSON (schÃ©ma edt-mp-archive-1 â cf. archLoad137, module 60) ; l'onglet Promos lit
+// le rapprochement OSE de cette mÃªme archive.
+const PROMOS_105 = ["MP-1A", "MP-2A", "MP-2A-ALT", "MP-3A-MAE", "MP-3A-AVTECH", "CiTiSE2"]; // ordre d affichage
+const PROMOS_105_KEYS = {};
+for (const k of PROMOS_105) PROMOS_105_KEYS[k.toUpperCase()] = k; // SUITE 105c : rÃ©solution promo INSENSIBLE au libellÃ© du flux
+// SUITE 105c : promo du pipeline PERSO regroupÃ©e en UN seul endroit (persoTagged + onglet Promos).
+// Bug 105b racine : promoOfGroup ne reconnaÃ®t pas Â« CiTiSE2-IUTD Â» (sans prÃ©fixe Etud-) ni aucune
+// variante de casse â les heures CiTiSE partaient en Â« ? Â» (hors promotions) partout (SynthÃ¨se ET Promos).
+// Ici : chaque groupe est nettoyÃ© (prÃ©fixe Etud-, suffixe -IUTD, casse) puis comparÃ© aux clÃ©s du
+// rapprochement OSE ; sinon repli promoOfGroup inchangÃ© ; sinon "?".
+// SUITE 131 : Ã©tiquette d'origine D'ABORD â promoSrc (promo du flux ADE du crÃ©neau) ne se devine
+// jamais ; les groupes ambiguÃ«s nus (Â« IUTD1 Â» : CiTiSE1 âª CiTiSE2, Â« A Â»/Â« B Â» : BUT1 âª AVTECH,
+// Â« ALT1 Â»/Â« ALT2 Â» : BUT2-ALT âª MAE) ne peuvent plus Ãªtre rÃ©attribuÃ©s Ã  la mauvaise promo.
+// Repli inchangÃ© : nettoyage Â±-IUTD puis clÃ©s OSE ; sinon promoOfGroup SAUF groupe ambigu â Â« ? Â»
+// (bug 131 = TP CiTiSE2 d un collÃ¨gue affichÃ©s Â« CiTiSE1-IUTD : 20 h Â» â capture recette 24/11).
+const AMBIG_GROUPS_131 = new Set(["IUTD1", "IUTD2", "A", "B", "ALT1", "ALT2"]); // nÅuds partagÃ©s entre â¥ 2 promos (arbres PROMOS, audit 131 exhaustif)
+const AMBIG_PROMO_131 = {
+  "CiTiSE1-IUTD": 1,
+  "CiTiSE2-IUTD": 1,
+  "MP-1A": 1,
+  "MP-3A-AVTECH": 1,
+  "MP-2A-ALT": 1,
+  "MP-3A-MAE": 1
+}; // promos concernÃ©es (informatif)
+const persoPromoOf105 = e => {
+  const src = e && e.promoSrc ? String(e.promoSrc).trim() : "";
+  if (src === "CiTiSE2-IUTD") return "CiTiSE2"; // clÃ© du rapprochement OSE (CiTiSE2-IUTD â CiTiSE2)
+  if (src && PROMOS[src]) return src; // Ã©tiquette d'origine : vÃ©ritÃ© du flux ADE (jamais devinÃ©e)
+  const gs = persoGroups(e);
+  for (const g of gs) {
+    const n = String(g == null ? "" : g).trim().toUpperCase().replace(/^ETUD-/, "").replace(/-IUTD\d?$/, "");
+    if (PROMOS_105_KEYS[n]) return PROMOS_105_KEYS[n];
+  }
+  for (const g of gs) {
+    if (AMBIG_GROUPS_131.has(String(g == null ? "" : g).trim().toUpperCase())) return "?";
+  } // nu sans origine : on ne devine PAS (bug 131)
+  return gs.map(g => promoOfGroup(g, null)).filter(Boolean)[0] || "?";
+};
+
+// ---------- Suite 92 : pont v4 â moteur (spec : c'est le PIPELINE HÃTE qui classifie) ----------
+// persoTypeOf : classification d'un crÃ©neau de l'index enseignant avec les rÃ¨gles v4
+// (detectType + dÃ©duction par les groupes via evTypeOf) ; exclusions = Ã©valuations,
+// Ã©vÃ©nements informatifs, sÃ©ances Ã  plusieurs enseignants (jurys/rÃ©unions). Cours nu
+// sans prÃ©fixe ni dÃ©duction possible â repli Â« cm Â» (rÃ¨gle moteur validÃ©e 25-26).
+// SUITE 137 : constante nominative RETIRÃE â aucune constante nominative ne
+// reste ; l'enseignant de rÃ©fÃ©rence est toujours celui du favori qui ouvre la SynthÃ¨se
+// (ou l'enseignant dominant du flux via ensKeyOf).
+const fmt2 = x => (Math.round(x * 100) / 100).toLocaleString("fr-FR", {
+  maximumFractionDigits: 2
+});
+const persoGroups = e => typeof (e && e.groups) === "string" ? e.groups ? e.groups.split(",").map(g => g.trim()).filter(Boolean) : [] : Array.isArray(e && e.groups) ? e.groups : []; // base embarquÃ©e : groups = chaÃ®ne ; ICS/flux : tableau
+const persoTypeOf = e => {
+  if (!e) return "exclu";
+  const gs = persoGroups(e);
+  const w = {
+    ...e,
+    groups: gs,
+    co: Array.isArray(e.co) ? e.co : typeof e.co === "string" ? e.co ? [e.co] : [] : e.co ? [e.co] : []
+  }; // co normalisÃ© aussi (multiTch attend un tableau)
+  if (multiTch(w) || detectType(e) === "Examen" || isDevoir(e) || INFO_EV_RE.test(e.summary || "") || /contrainte|conseil|commission|harmonisation/i.test(e.summary || "")) return "exclu"; // SUITE 95/97 : contraintes personnelles ADE + conseils/commissions/harmonisation jamais comptes ni roses (pipeline perso uniquement, moteur et compteurs agenda intacts)
+  const promo = e.promoSrc && PROMOS[e.promoSrc] ? e.promoSrc : gs.map(g => promoOfGroup(g, null)).filter(Boolean)[0] || null; // SUITE 131 : Ã©tiquette d'origine d'abord
+  const t = evTypeOf(w, promo); // groups NORMALISÃS : typeHintOf attend un tableau
+  if (t === "CM" || t === "TD" || t === "TP") return t.toLowerCase();
+  return "cm";
+};
+// Le classif passÃ© Ã  aggregate() ne reÃ§oit QUE le summary : le type v4 est donc
+// prÃ©-calculÃ© puis taguÃ© dans le summary (Â« â¦tpâ§Titre Â») â moteur intact, pas d'ambiguÃ¯tÃ©
+// (detectType v4 dÃ©pend des groupes, il ne peut PAS passer par le summary seul).
+const persoClassif = s => s && s[0] === "â¦" && s.indexOf("â§", 1) > 0 ? s.slice(1, s.indexOf("â§", 1)) : "exclu";
+const persoTagged = evs => (evs || []).map(e => ({
+  summary: "â¦" + persoTypeOf(e) + "â§" + (e.summary || ""),
+  start: decDT(e.start),
+  end: decDT(e.end),
+  promo: persoPromoOf105(e) // SUITE 105c : CiTiSE2 reconnu (avant : l.angle Â« ? Â» = hors promotions)
+}));
+const persoBuild = (tch, index, ref, service) => BilanEngine.buildYear({
+  start: [2026, 7, 24],
+  nw: 45,
+  weeks: BilanEngine.aggregate(persoTagged((index || {})[tch] || []), persoClassif),
+  refTotal: ref,
+  service: service
+}); // suite 93 : service statutaire paramÃ©trable
+
+// ---------- SUITE 94 : flux Â« ens Â» personnel = rÃ©fÃ©rence enseignant + rattachement MP ----------
+// mpMaskOf : masque Â« appartient au dÃ©partement MP Â» = couples (id ADE, horodatage) des
+// crÃ©neaux des flux promos MP (base embarquÃ©e ou reconstruction Â« â» Â»). Les identifiants
+// ADE sont identiques entre extractions promos et extractions enseignant (vÃ©rifiÃ© 158/158).
+// mpMaskOf/evInMpMask sont UTILITAIRES (aucun filtrage silencieux) : le filtrage Ã©ventuel
+// est explicite, derriÃ¨re le toggle MP/Tout (v4 seule, PERSO_ENABLED), dÃ©faut = Tout.
+const mpMaskOf = evsByPromo => {
+  const m = new Set();
+  for (const p of evsByPromo ? Object.keys(evsByPromo) : []) for (const e of evsByPromo[p] || []) m.add((e.id || "") + "@" + (e && e.start instanceof Date ? e.start : decDT(e.start)).getTime());
+  return m;
+};
+const evInMpMask = (e, mask) => {
+  if (!e || !e.id) return true; // sans id ADE â jamais marquÃ© hors MP
+  if (/^RSS/.test(e.id)) return true; // crÃ©neaux RSS historiques (IUT/MP) : jamais hors MP
+  const g = e.groups === undefined || e.groups === null ? "" : typeof e.groups === "string" ? e.groups : e.groups.join(",");
+  if (/Evenements MP/i.test(g)) return true; // Ã©vÃ©nements du dÃ©partement SANS promo (conseils, jurys, commissions, rÃ©unions)
+  return !mask || !e ? true : mask.has(e.id + "@" + (e.start instanceof Date ? e.start : decDT(e.start)).getTime());
+};
+// ensKeyOf : RECONNAISSANCE de l'enseignant dÃ©jÃ  listÃ© pour un flux Â« ens Â» personnel â
+// l'enseignant dominant (â¥ 70 % des crÃ©neaux portent son nom, mÃªme rÃ¨gle que importIcs),
+// sinon repli sur le nom du flux en majuscules (comportement historique suite 83).
+const ensKeyOf = (evs, name) => {
+  const cnt = {};
+  for (const e of evs || []) (e.teacher || "").split(" / ").forEach(t => {
+    const x = t.trim();
+    if (x) cnt[x] = (cnt[x] || 0) + 1;
+  });
+  const main = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0];
+  return main && cnt[main] >= (evs || []).length * 0.7 ? main : String(name || "").trim().toUpperCase();
+};
+
+// ---- SUITE 108 : multi-collÃ¨gues â clÃ©s localStorage PRÃFIXÃES par enseignant + parseur
+// OSE Â« page collÃ©e derriÃ¨re le CAS Â». Deux favoris enseignants sur un mÃªme appareil ne se
+// marchent plus dessus (rÃ©fÃ©rentiel, lignes, service, imports OSE). Lecture avec repli sur
+// les anciennes clÃ©s (92-107) ancienne portÃ©e = migration transparente, aucun changement vÃ©cu.
+const persoKeyOf = (t, k) => "edt2-perso-" + (t || "?") + "-" + k;
+const PERSO_LEGACY_KEYS = {
+  "ref": "edt2-perso-ref",
+  "ref-lines": "edt2-perso-ref-lines",
+  "service": "edt2-perso-service"
+};
+// SUITE 110 : pÃ©rimÃ¨tre des clÃ©s UTILISATEUR (export/import complet v2) â donnÃ©es
+// saisies ou choisies, jamais reconstruites depuis les flux. Les caches annuels
+// (LS_ANNUAL, edt2-events:*), edt2-schema, edt2-year et les mots de passe
+// (edt-mp-pw-*) sont EXCLUS : les caches se resynchronisent, le mot de passe
+// n'a rien Ã  faire dans un export.
+const LS_USER_SCAN110 = k => typeof k === "string" && (k === "edt2-favs" || k === "edt2-sources" || k === "edt2-feed-urls" || k === "edt2-fit" || k === "edt2-mp-only" || k === "edt2-perso-ref" || k === "edt2-perso-ref-lines" || k === "edt2-perso-service" || k.indexOf("edt2-perso-") === 0 || k.indexOf("edt2-serhist") === 0 || k.indexOf("edt2-archive-") === 0);
 const persoLoad108 = (t, k) => {
   const v = load(persoKeyOf(t, k));
   if (v === null && PERSO_LEGACY_KEYS[k]) return load(PERSO_LEGACY_KEYS[k]); // SUITE 137 : migration NEUTRE â les clÃ©s non prÃ©fixÃ©es (suites 92-107) n ont existÃ© que sur l appareil du titulaire qui les a Ã©crites (versions mono-compte) : elles servent ici de repli pour cet enseignant, sans aucun nom codÃ© en dur
@@ -1951,7 +2603,609 @@ function Kiosk132({
           height: 30,
           background: "var(--fam-" + fk + "-bg)",
           color: "var(--fam-" + fk + "-hue)",
-          borderBoload("edt2-light") === "light");
+          borderBottom: "3px solid var(--fam-" + fk + "-hue)",
+          backgroundImage: altP ? HATCH : undefined
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        className: "font-extrabold",
+        style: {
+          fontSize: 22
+        }
+      }, (PROMOS[q.p] || {
+        label: q.p
+      }).label), altP && /*#__PURE__*/React.createElement("span", {
+        className: "text-[9px] uppercase tracking-wider opacity-80"
+      }, "alternants")), /*#__PURE__*/React.createElement("div", {
+        className: "flex",
+        style: {
+          height: HEAD - 44
+        }
+      }, q.leaves.map(g => /*#__PURE__*/React.createElement("div", {
+        key: g,
+        className: "grid place-items-center leading-none",
+        style: {
+          flexGrow: 1,
+          minWidth: 0,
+          fontSize: 21,
+          fontWeight: 800,
+          color: "#e2e8f0"
+        }
+      }, grpDisp(q.p, g)))));
+    })), /*#__PURE__*/React.createElement("div", {
+      className: "flex",
+      style: {
+        height: bodyH
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "relative",
+      style: {
+        width: 58,
+        flex: "none"
+      }
+    }, Array.from({
+      length: hrs
+    }, (_, i) => /*#__PURE__*/React.createElement("div", {
+      key: i,
+      className: "text-right pr-1 text-slate-500 leading-none",
+      style: {
+        fontSize: 13,
+        height: rowH,
+        borderBottom: "1px solid rgba(30,41,59,.6)"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        position: "relative",
+        top: -6
+      }
+    }, z.min + i, "h")))), z.promos.map(q => {
+      const unit = 100 / q.leaves.length;
+      const laid = layoutDay(q.evs, q.leaves, q.p);
+      return /*#__PURE__*/React.createElement("div", {
+        key: q.p,
+        className: "relative",
+        style: {
+          flexGrow: q.leaves.length,
+          flexBasis: 0,
+          minWidth: 0,
+          borderRight: "1px solid rgba(30,41,59,.9)"
+        }
+      }, Array.from({
+        length: hrs
+      }, (_, i) => /*#__PURE__*/React.createElement("div", {
+        key: i,
+        style: {
+          height: rowH,
+          borderBottom: "1px solid rgba(30,41,59,.42)"
+        }
+      })), laid.map((b, bi) => {
+        const e = b.ev;
+        const top = (e.start.getHours() + e.start.getMinutes() / 60 - z.min) * rowH;
+        const hgt = (e.end - e.start) / 36e5 * rowH;
+        const c = colorFor(e, q.p, "promo");
+        const w = unit * (b.c1 - b.c0 + 1) / b.nsub;
+        const left = unit * b.c0 + w * b.lane;
+        const isNow = k132.isToday && refT >= e.start && refT < e.end; // SUITE 150 : voile de progression (heure naviguÃ©e) du crÃ©neau en cours
+        const T = Math.max(hgt - 4, 16);
+        return /*#__PURE__*/React.createElement("div", {
+          key: e.id + "@" + e.start.getTime() + "#" + bi,
+          className: "absolute rounded-lg overflow-hidden text-center cq-case " + (isNow ? "z-[6]" : ""),
+          style: {
+            ...c.style,
+            top: top + 2,
+            height: T,
+            left: "calc(" + left + "% + 1.5px)",
+            width: "calc(" + w + "% - 3px)",
+            padding: "3px 5px"
+          }
+        }, isNow && (() => {
+          // SUITE 150 : voile blanc translucide remplissant la case depuis le HAUT, bord bas NET â hauteur lissÃ©e par transition 30 s entre les rendus de l'horloge
+          const p150 = Math.max(0, Math.min(1, (refT - e.start) / Math.max(1, e.end - e.start)));
+          return /*#__PURE__*/React.createElement("div", {
+            className: "absolute left-0 right-0 top-0 pointer-events-none",
+            style: {
+              height: Math.round(p150 * T),
+              background: "rgba(255,255,255,.30)",
+              borderBottom: "2px solid rgba(255,255,255,.75)",
+              transition: "height 30s linear"
+            }
+          });
+        })(), tvdiff143.flags.get(e) && /*#__PURE__*/React.createElement("div", {
+          className: "absolute pointer-events-none",
+          style: {
+            top: 2,
+            right: 2,
+            transform: "rotate(-8deg)",
+            color: "#f59e0b",
+            border: "3px solid #f59e0b",
+            borderRadius: 8,
+            padding: "1px 8px",
+            fontSize: 15,
+            fontWeight: 900,
+            textTransform: "uppercase",
+            letterSpacing: ".04em",
+            background: "rgba(15,23,42,.85)",
+            zIndex: 7
+          }
+        }, "â modifiÃ©"), (() => {
+          const serB = tvBadge148(e, q.p);
+          const tB = c.badge;
+          const bSt = {
+            fontSize: isNow ? 14 : "clamp(11px,8cqh,14px)",
+            padding: "0 4px",
+            borderRadius: 4
+          };
+          const badges = /*#__PURE__*/React.createElement("span", {
+            className: "inline-flex items-center gap-1 leading-none"
+          }, tB && /*#__PURE__*/React.createElement("span", {
+            className: "font-bold text-slate-900 bg-slate-100 rounded",
+            style: bSt
+          }, tB), serB && /*#__PURE__*/React.createElement("span", {
+            className: "font-bold text-slate-900 bg-slate-100 rounded",
+            style: bSt
+          }, serB.n + "/" + serB.N));
+          const title = tvAbbr(typeTitle(e.summary, tB === "TP" && e.end - e.start >= 2 * 36e5 ? null : tB, true));
+          const loc148 = tvLoc148(e.location);
+          if (T < 44) return /*#__PURE__*/React.createElement("div", {
+            className: "flex items-center justify-center gap-1 leading-none whitespace-nowrap"
+          }, /*#__PURE__*/React.createElement("span", {
+            className: "font-semibold truncate min-w-0",
+            style: {
+              fontSize: "clamp(12px,8cqh,15px)"
+            }
+          }, title), /*#__PURE__*/React.createElement("span", {
+            className: "flex-none opacity-70",
+            style: {
+              fontSize: "clamp(11px,8cqh,14px)"
+            }
+          }, "\u23F0 " + fmtHM(e.start) + "â" + fmtHM(e.end)), loc148 && /*#__PURE__*/React.createElement("span", {
+            className: "flex-none font-black text-yellow-300",
+            style: {
+              fontSize: "clamp(11px,8cqh,15px)"
+            }
+          }, loc148), badges);
+          {/* SUITE 148c2 (recette devoir Ã©lectrochimie 45 min) : la salle
+              passe en COLONNE Ã DROITE de la case â pleine hauteur, texte
+              alignÃ© Ã  gauche dedans â dÃ¨s que l'empilement vertical ne tient
+              pas : cases basses (T < 76) OU salle trop longue pour une ligne
+              (estimation ~0,62 em/caractÃ¨re vs largeur rÃ©elle de la case).
+              Sinon l'empilement historique est conservÃ©. */}
+          const fS148 = Math.min(28, Math.max(22, 0.13 * T));
+          const colW148 = (1920 - 58) * (q.leaves.length / totalLeaves) * ((b.c1 - b.c0 + 1) / (q.leaves.length * b.nsub));
+          const needCol148 = !!loc148 && (T < 76 || loc148.length * fS148 * 0.62 > colW148 * 0.88);
+          const main148 = /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+            className: "font-semibold leading-tight line-clamp-2",
+            style: {
+              fontSize: isNow ? "clamp(19px,16cqh,24px)" : "clamp(15px,14cqh,19px)"
+            }
+          }, title), /*#__PURE__*/React.createElement("div", {
+            className: "leading-tight",
+            style: {
+              fontSize: isNow ? "clamp(16px,11cqh,20px)" : "clamp(14px,10cqh,17px)"
+            }
+          }, "\u23F0 " + fmtHM(e.start) + "â" + fmtHM(e.end)), !needCol148 && loc148 && /*#__PURE__*/React.createElement("div", {
+            className: "font-black text-yellow-300 leading-tight truncate",
+            style: {
+              fontSize: isNow ? "clamp(26px,15cqh,34px)" : "clamp(22px,13cqh,28px)"
+            }
+          }, loc148), (isNow || T >= 76) && e.teacher && /*#__PURE__*/React.createElement("div", {
+            className: (isNow ? "" : "opacity-70 ") + "leading-tight truncate",
+            style: {
+              fontSize: isNow ? "clamp(15px,10cqh,19px)" : "clamp(13px,9cqh,17px)"
+            }
+          }, e.teacher), /*#__PURE__*/React.createElement("div", {
+            className: "mx-auto w-fit"
+          }, badges));
+          if (!needCol148) return main148;
+          return /*#__PURE__*/React.createElement("div", {
+            className: "flex h-full justify-center gap-2"
+          }, /*#__PURE__*/React.createElement("div", {
+            className: "min-w-0 max-w-full"
+          }, main148), /*#__PURE__*/React.createElement("div", {
+            className: "flex-none w-fit max-w-[46%] self-stretch flex items-center text-left"
+          }, /*#__PURE__*/React.createElement("span", {
+            className: "font-black text-yellow-300 break-words",
+            style: {
+              fontSize: isNow ? "clamp(26px,15cqh,34px)" : "clamp(22px,13cqh,28px)"
+            }
+          }, loc148)));
+        })());
+      }), tvdiff143.on && tvdiff143.ghosts.filter(gh => gh.p === q.p && sameDay(gh.start, z.day) && (k132.pm ? gh.start.getHours() * 60 + gh.start.getMinutes() >= TV_SPLIT : gh.start.getHours() * 60 + gh.start.getMinutes() < TV_SPLIT)).map((gh, gi) => {
+        const gLeaves143 = tvGhostLeaves143(gh.gs, q.leaves);
+        let gc0 = q.leaves.indexOf(gLeaves143[0]);
+        if (gc0 < 0) gc0 = 0;
+        let gc1 = q.leaves.indexOf(gLeaves143[gLeaves143.length - 1]);
+        if (gc1 < gc0) gc1 = q.leaves.length - 1;
+        const gTop143 = (gh.start.getHours() + gh.start.getMinutes() / 60 - z.min) * rowH;
+        const gH143 = Math.max((gh.end - gh.start) / 36e5 * rowH - 4, 16);
+        return /*#__PURE__*/React.createElement("div", {
+          key: "gh143-" + gi,
+          className: "absolute",
+          style: {
+            top: gTop143 + 2,
+            height: gH143,
+            left: "calc(" + unit * gc0 + "% + 1.5px)",
+            width: "calc(" + unit * (gc1 - gc0 + 1) + "% - 3px)",
+            pointerEvents: "none"
+          }
+        }, /*#__PURE__*/React.createElement("div", {
+          className: "absolute",
+          style: {
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%,-50%) rotate(-8deg)",
+            color: "#f59e0b",
+            border: "3px solid #f59e0b",
+            borderRadius: 8,
+            padding: "1px 8px",
+            fontSize: 15,
+            fontWeight: 900,
+            textTransform: "uppercase",
+            letterSpacing: ".04em",
+            background: "rgba(15,23,42,.7)"
+          }
+        }, "â modifiÃ©"));
+      }));
+    })));
+  };
+  const dayLbl = k132.empty ? "" : (k132.other ? "Â· " : "") + k132.day.toLocaleDateString("fr-FR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long"
+  });
+  return /*#__PURE__*/React.createElement("div", {
+    style: stageWrap
+  }, /*#__PURE__*/React.createElement("div", {
+    style: stageStyle,
+    className: "bg-slate-950 text-slate-100 font-sans flex flex-col"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      height: 90,
+      flex: "none"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-6 px-7",
+    style: {
+      height: 52
+    }
+  }, /*#__PURE__*/React.createElement("h1", {
+    className: "font-extrabold tracking-tight",
+    style: {
+      fontSize: 30
+    }
+  }, "Dpt ", /*#__PURE__*/React.createElement("span", {
+    className: "text-indigo-400"
+  }, "MP"), " â IUT St-Ãtienne"), !k132.empty && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 28
+    },
+    className: "capitalize font-semibold text-slate-300"
+  }, dayLbl), !k132.empty && (wkEdit === null ? /*#__PURE__*/React.createElement("span", {
+    onClick: () => setWkEdit(String(tvIsoW(k132.day))),
+    className: "font-extrabold text-slate-900 bg-slate-100 hover:bg-white rounded-lg px-2 py-0.5 tabular-nums cursor-pointer",
+    style: {
+      fontSize: 24
+    },
+    title: "NumÃ©ro de semaine ISO (repÃ¨re ADE/logistique) â cliquez pour naviguer directement vers une autre semaine (recette)"
+  }, "S" + tvIsoW(k132.day)) : /*#__PURE__*/React.createElement("input", {
+    autoFocus: true,
+    value: wkEdit,
+    onChange: ev => setWkEdit(ev.target.value.replace(/[^0-9]/g, "")),
+    onKeyDown: ev => {
+      if (ev.key === "Enter") {
+        const w = parseInt(wkEdit, 10);
+        if (w >= 1 && w <= 53) setNav(nav + (w - tvIsoW(k132.day)) * 14);
+        setWkEdit(null);
+      } else if (ev.key === "Escape") {
+        setWkEdit(null);
+      }
+    },
+    onBlur: () => setWkEdit(null),
+    className: "w-[64px] bg-white text-slate-900 font-extrabold text-center rounded-lg px-1 py-0.5 tabular-nums outline-none border-2 border-sky-400",
+    style: {
+      fontSize: 24
+    },
+    title: "Semaine ISO cible (1-53) â EntrÃ©e pour valider, Ãchap pour annuler"
+  })), !k132.empty && /*#__PURE__*/React.createElement("span", {
+    className: "font-bold rounded-lg px-3 py-0.5",
+    style: {
+      fontSize: 22,
+      background: k132.pm ? "rgba(59,130,246,.25)" : "rgba(245,158,11,.25)",
+      color: k132.pm ? "#93c5fd" : "#fcd34d"
+    }
+  }, k132.pm ? "AprÃ¨s-midi" : "Matin"), !k132.empty && k132.other && /*#__PURE__*/React.createElement("span", {
+    className: "text-amber-300/80",
+    style: {
+      fontSize: 15
+    }
+  }, "Â½ journÃ©e inversÃ©e (la courante est vide)"), !k132.empty && !k132.isToday && /*#__PURE__*/React.createElement("span", {
+    className: "text-amber-300/80",
+    style: {
+      fontSize: 15
+    }
+  }, "prochain jour avec crÃ©neaux"), (() => {
+    const errs = feedErrs && feedErrs.length;
+    const stale = !busy && lastSync && nowT.getTime() - new Date(lastSync).getTime() > 3600e3;
+    const red = !busy && !!errs;
+    const amber = !busy && !errs && stale;
+    const cls134 = red ? "bg-red-500/25 border border-red-400/70 text-red-300 rounded-lg px-2 " : amber ? "bg-amber-500/25 border border-amber-400/70 text-amber-300 rounded-lg px-2 " : "bg-emerald-500/25 border border-emerald-400/70 text-emerald-300 rounded-lg px-2 ";
+    const msg = red ? "â  erreur de synchro, derniÃ¨re Ã  : " : amber ? "â  derniÃ¨re synchro Ã  : " : "â DonnÃ©es synchronisÃ©es Ã  : ";
+    const tip = red ? "â  Erreur de synchro â derniÃ¨res donnÃ©es affichÃ©es de " + (lastSync ? fmtHM(lastSync) : "â") + " ; prÃ©venir le SI si Ã§a persiste" : amber ? "â  DonnÃ©es non rafraÃ®chies depuis plus d'une heure (derniÃ¨re synchro : " + (lastSync ? fmtHM(lastSync) : "â") + ") ; prÃ©venir le SI si Ã§a persiste" : "DerniÃ¨re synchronisation des flux ADE â vert si ok, jaune (>1 h sans rafraÃ®chissement) ou rouge (erreur de synchro)";
+    return /*#__PURE__*/React.createElement("span", {
+      className: cls134 + "ml-auto font-extrabold tabular-nums inline-flex items-center gap-1.5",
+      style: {
+        fontSize: 20
+      },
+      title: tip
+    }, busy ? "Synchronisationâ¦" : !lastSync ? "chargementâ¦" : red || amber ? /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 22
+      }
+    }, msg + fmtHM(lastSync)) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", null, msg), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 40
+      }
+    }, fmtHM(lastSync))));
+  })(), /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-400",
+    style: {
+      fontSize: 20
+    }
+  }, "Heure actuelle"), /*#__PURE__*/React.createElement("span", {
+    className: "font-extrabold text-sky-300 tabular-nums",
+    style: {
+      fontSize: 40
+    }
+  }, String(nowT.getHours()).padStart(2, "0") + ":" + String(nowT.getMinutes()).padStart(2, "0"))), /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-4 px-7",
+    style: {
+      height: 38
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-1 select-none ml-auto",
+    style: {
+      flex: "none"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      try {
+        if (onRefresh) onRefresh({
+          silent: true
+        });
+      } catch (err) {}
+    },
+    title: "RafraÃ®chir manuellement les flux ICS ADE (recette â l'auto-refresh 15 min reste actif)",
+    className: "font-black rounded-lg px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-400/60 hover:bg-emerald-500/40",
+    style: {
+      fontSize: 15
+    }
+  }, busy ? "â» â¦" : "â»"), nav !== 0 && /*#__PURE__*/React.createElement("button", {
+    onClick: () => setNav(0),
+    title: "Revenir Ã  maintenant (auto aprÃ¨s 3 min)",
+    className: "font-bold rounded-lg px-2 py-0.5 bg-sky-500/20 text-sky-300 border border-sky-400/60 hover:bg-sky-500/40",
+    style: {
+      fontSize: 14
+    }
+  }, "â"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setNav(nav - 1),
+    title: "Â½ journÃ©e prÃ©cÃ©dente (recette : tester les aprÃ¨s-midi)",
+    className: "font-black rounded-lg px-2 py-0.5 bg-slate-800 text-slate-300 border border-slate-600 hover:bg-slate-700",
+    style: {
+      fontSize: 16
+    }
+  }, "â¹"), /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-400 tabular-nums w-[64px] text-center",
+    style: {
+      fontSize: 14
+    }
+  }, nav === 0 ? "maintenant" : nav > 0 ? "+" + nav + " Â½j" : nav + " Â½j"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setNav(nav + 1),
+    title: "Â½ journÃ©e suivante (recette : tester les aprÃ¨s-midi)",
+    className: "font-black rounded-lg px-2 py-0.5 bg-slate-800 text-slate-300 border border-slate-600 hover:bg-slate-700",
+    style: {
+      fontSize: 16
+    }
+  }, "âº")))), k132.empty ? /*#__PURE__*/React.createElement("div", {
+    className: "grid",
+    style: {
+      height: 990
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "place-self-center text-slate-500",
+    style: {
+      fontSize: 30
+    }
+  }, "Aucun crÃ©neau Ã  venir dans les 8 prochains jours.")) : /*#__PURE__*/React.createElement("div", {
+    className: "flex flex-col gap-2 px-3 pb-2",
+    style: {
+      height: 990
+    }
+  }, zoneBlocks(k132.zones[0]), zoneBlocks(k132.zones[1]))));
+}
+// ---------- Application ----------
+// SUITE 134 : THÃME CLAIR (option, dÃ©faut sombre inchangÃ©) â feuille d'overrides
+// DECLARATIFS activÃ©e par <html class="light"> (toggle dans Options). Elle remappe
+// les surfaces / textes / bordures sombres de l'appli en Ã©quivalents clairs SANS
+// toucher aux composants ; les cases de crÃ©neaux gardent leurs couleurs colorFor
+// (styles inline, teintes translucides lisibles aussi sur fond clair). RÃ¨gle de
+// maintenance : une NOUVELLE classe sombre ajoutÃ©e Ã  l'appli doit Ãªtre ajoutÃ©e ici
+// pour exister aussi en clair (le journal le rappelle).
+// SUITE 146 : teinte sombre de l'entÃªte du jour courant (vue Semaine) â Ã©cho du #e0e7ff
+// du thÃ¨me clair ; la rÃ¨gle html.light .head-today (plus spÃ©cifique) garde la main en clair.
+// PlacÃ©e EN FIN du bloc style : l'ordre tokens â light â adapt 136/141c est prÃ©servÃ©.
+const TODAY_CSS_146 = ".head-today{background:rgba(99,102,241,0.4);color:#eef2ff}";
+const LIGHT_CSS_134 = ["html.light{color-scheme:light}", "html.light body{background:#eef2f7;color:#1e293b}",
+// SUITE 141 : hiÃ©rarchie claire â racine/inputs BLANCS, SURFACES /60 /70 teintÃ©es #f8fafc,
+// boutons blancs + ombre portÃ©e lÃ©gÃ¨re, onglet actif indigo foncÃ© texte blanc (option A).
+"html.light .bg-slate-950{background-color:#ffffff}", "html.light .bg-slate-950\\/60,html.light .bg-slate-950\\/70{background-color:#f8fafc}", "html.light .bg-slate-900,html.light .bg-slate-900\\/50,html.light .bg-slate-900\\/60,html.light .bg-slate-900\\/80,html.light .bg-slate-900\\/95{background-color:#ffffff;box-shadow:0 1px 2px rgba(15,23,42,.12)}", "html.light input.bg-slate-950,html.light textarea.bg-slate-950,html.light select.bg-slate-950{box-shadow:inset 0 1px 2px rgba(15,23,42,.07)}", "html.light .bg-indigo-400{background-color:#4338ca}", "html.light .bg-indigo-400.text-slate-900{color:#ffffff}", "html.light button.bg-indigo-400{box-shadow:0 2px 5px rgba(67,56,202,.35)}", "html.light .border-indigo-400{border-color:#4338ca}", "html.light .head-today{background:#e0e7ff;color:#3730a3}", "html.light .bg-slate-800,html.light .bg-slate-800\\/40,html.light .bg-slate-800\\/60{background-color:#e2e8f0}", "html.light .bg-slate-700,html.light .hover\\:bg-slate-700:hover,html.light .hover\\:bg-slate-800:hover{background-color:#cbd5e1}", "html.light .text-slate-100{color:#0f172a}", "html.light .text-slate-200,html.light .hover\\:text-slate-200:hover{color:#1e293b}", "html.light .text-slate-300{color:#334155}", "html.light .text-slate-400{color:#475569}", "html.light .text-slate-500{color:#64748b}", "html.light .text-slate-600,html.light .text-slate-700{color:#475569}", "html.light .text-amber-300,html.light .text-amber-200{color:#b45309}", "html.light .text-emerald-300{color:#047857}", "html.light .text-sky-300{color:#0369a1}", "html.light .text-rose-300{color:#be123c}", "html.light .text-indigo-300{color:#4338ca}", "html.light .text-teal-300{color:#0f766e}", "html.light .text-violet-300{color:#5b21b6}", "html.light .text-yellow-300{color:#a16207}", "html.light .text-red-400,html.light .text-red-300{color:#b91c1c}", "html.light .border-slate-800,html.light .border-slate-700,html.light .border-slate-600{border-color:#cbd5e1}", "html.light .border-slate-500,html.light .hover\\:border-slate-500:hover{border-color:#94a3b8}", "html.light .border-slate-300{border-color:#cbd5e1}", "html.light .border-slate-100{border-color:#e2e8f0}",
+// SUITE 135 : trous de la 134 constatÃ©s en recette â text-slate-50 (97 occurrences,
+// texte quasi blanc sur blanc), survols pÃ¢les, -200 oubliÃ©s, filets slate-950/40,
+// -400 assombris d'un cran pour un contraste WCAG correct sur fond blanc.
+"html.light .text-slate-50{color:#0f172a}", "html.light .hover\\:text-slate-100:hover,html.light .hover\\:text-slate-300:hover{color:#0f172a}", "html.light .hover\\:text-amber-200:hover,html.light .hover\\:text-amber-300:hover{color:#b45309}", "html.light .hover\\:text-rose-300:hover,html.light .hover\\:text-rose-200:hover{color:#be123c}", "html.light .hover\\:text-indigo-300:hover{color:#4338ca}", "html.light .text-indigo-200{color:#4338ca}", "html.light .text-emerald-200{color:#047857}", "html.light .text-amber-400{color:#b45309}", "html.light .text-emerald-400{color:#047857}", "html.light .text-sky-400{color:#0369a1}", "html.light .text-violet-400{color:#5b21b6}", "html.light .text-indigo-400{color:#4338ca}", "html.light .text-blue-400{color:#1d4ed8}", "html.light .border-slate-950\\/40{border-color:#cbd5e1}", "html.light .placeholder\\:text-slate-500::placeholder{color:#64748b}",
+// SUITE 136 (option A Â« tints pÃ¢les Â») : les tokens de couleurs des cases (thÃ¨me
+// vars) redÃ©finis pour le clair â palette CONSTRUITE pour fond blanc, pas inversÃ©e :
+// tint solide pÃ¢le par famille, teintes 600-700 pour bordures, hachures noires
+// translucides visibles, examen lila foncÃ© discret. MÃªmes tokens que THEME_VARS_136.
+"html.light{--hatch:rgba(0,0,0,.06);--exam-line:#7c3aed;", "--fam-but1-hue:#059669;--fam-but1-dark:#065f46;--fam-but1-bg:#e9f7f0;--fam-but1-cm:#e9f7f0;--fam-but1-txt:#064e3b;", "--fam-but2-hue:#2563eb;--fam-but2-dark:#1d4ed8;--fam-but2-bg:#e8f0fe;--fam-but2-cm:#e8f0fe;--fam-but2-txt:#1e3a8a;", "--fam-but3-hue:#dc2626;--fam-but3-dark:#991b1b;--fam-but3-bg:#fdecec;--fam-but3-cm:#fdecec;--fam-but3-txt:#7f1d1d;", "--fam-citise-hue:#0d9488;--fam-citise-dark:#0f766e;--fam-citise-bg:#e5f6f3;--fam-citise-cm:#e5f6f3;--fam-citise-txt:#115e59;", "--fam-dept-hue:#64748b;--fam-dept-dark:#475569;--fam-dept-bg:#e4e9f0;--fam-dept-cm:#e4e9f0;--fam-dept-txt:#0f172a}",
+// SUITE 136b (audit-light) : les 17 classes sombres restÃ©es hors feuille â c'Ã©tait
+// la cause des Â« boutons noirs Â» et Â« contours noirs partout Â» : boutons inactifs
+// bg-slate-900/border-slate-700 (dÃ©jÃ  couverts par les rÃ¨gles bg-slate-900/-700 de
+// la 134 â MAIS leurs variantes alpha et hovers manquaient), filets border-slate-
+// 800/40-50-60-70 et -700/60 des tables/listes, surfaces bg-slate-700/* et -800/30
+// (sÃ©lecteur de semaine, encadrÃ©s prÃ©visionnel), chips n/N bg-slate-100/300 â
+// blanches/gris clair (texte dÃ©jÃ  sombre), gradins vacances et repÃ¨res semaine.
+"html.light .bg-slate-100{background-color:#ffffff}", "html.light .bg-slate-300{background-color:#e2e8f0}", "html.light .bg-slate-500\\/10{background-color:#f1f5f9}", "html.light .bg-slate-600{background-color:#94a3b8}", "html.light .bg-slate-700\\/30{background-color:#f1f5f9}", "html.light .bg-slate-700\\/40{background-color:#e2e8f0}", "html.light .bg-slate-700\\/60{background-color:#e2e8f0}", "html.light .bg-slate-800\\/30{background-color:#f1f5f9}", "html.light .hover\\:bg-slate-800\\/40:hover,html.light .hover\\:bg-slate-800\\/60:hover{background-color:#e2e8f0}", "html.light .border-slate-400\\/30{border-color:#cbd5e1}", "html.light .border-slate-700\\/60{border-color:#e2e8f0}", "html.light .border-slate-800\\/40,html.light .border-slate-800\\/50,html.light .border-slate-800\\/60,html.light .border-slate-800\\/70{border-color:#cbd5e1}", "html.light .hover\\:border-slate-600:hover{border-color:#94a3b8}",
+// Garde-fou suite 135 : les 7 chips de badges (TD_COLOR_CYCLE, fonds bg-X-500/20
+// translucides) portent du texte -100 pÃ¢le â assombri pour le mode clair.
+"html.light .text-indigo-100{color:#4338ca}", "html.light .text-emerald-100{color:#047857}", "html.light .text-sky-100{color:#0369a1}", "html.light .text-amber-100{color:#b45309}", "html.light .text-rose-100{color:#be123c}", "html.light .text-teal-100{color:#0f766e}", "html.light .text-violet-100{color:#5b21b6}"].join("\n");
+function App() {
+  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
+  const [slotQ, setSlotQ] = useState({});
+  const [slotQOpen, setSlotQOpen] = useState({});
+  const [typeFilter, setTypeFilter] = useState("Tous");
+  const [selected, setSelected] = useState(null);
+  const [nav, setNav] = useState(null);
+  // Suite 73 : Â« planning de la ressource Â» â calque AU-DESSUS du popup de dÃ©tail, ouvert par le
+  // titre ou les badges du popup. planT = enseignants sÃ©lectionnÃ©s (surbrillance / Â« Seulement Â»),
+  // planHide = mode masquage des sÃ©ances d'autrui, planOpen = replis manuels par section,
+  // planAll = Â« Tout replier / Tout dÃ©plier Â» global (null = dÃ©faut : ancre seule).
+  const [plan, setPlan] = useState(null);
+  const [planT, setPlanT] = useState([]);
+  const [planHide, setPlanHide] = useState(false);
+  const [planOpen, setPlanOpen] = useState(null);
+  const [planAll, setPlanAll] = useState(null);
+  // suite 74c : ligne Â« DÃ©tails Â» du popup rÃ©duite par dÃ©faut (le DESCRIPTION ICS est souvent
+  // long) ; se rÃ©initialise Ã  chaque nouvelle case ouverte.
+  const [detailOpen, setDetailOpen] = useState(false);
+  useEffect(() => {
+    setDetailOpen(false);
+  }, [selected]);
+  const closeDetail = () => {
+    setNav(null);
+    setSelected(null);
+  };
+  const applyNav = choice => {
+    const t = nav;
+    if (!t || !t.ok) return;
+    const isBranch = ETUD_PROMO[(t.value || "").toUpperCase()] !== undefined;
+    const ns = {
+      id: nid.current++,
+      kind: t.kind,
+      promo: t.kind === "promo" ? t.promo : "MP-2A",
+      groups: t.kind === "promo" ? isBranch ? [] : [t.value] : [],
+      teacher: t.kind === "teacher" ? t.value : null,
+      room: t.kind === "room" ? t.value : null,
+      course: t.kind === "cours" ? t.value : null,
+      collapsed: false
+    };
+    // Suite 88 : le nouvel agenda HÃRITE du crÃ©neau cliquÃ© â vue Semaine : sa semaine
+    // (wk) ; vue JournÃ©e : son jour (jourSel posÃ© sur ce jour, navigation globale).
+    const sd = new Date(selected.start);
+    sd.setHours(0, 0, 0, 0);
+    if (viewMode === "semaine") ns.wk = Math.round((startOfWeek(sd) - weekStart) / (7 * 864e5));else if (viewMode === "jour") setJourAll(isoD(sd));
+    const oi = slots.findIndex(s => s.id === selected.slotId);
+    let next;
+    if (choice === "replace") next = slots.map(s => s.id === selected.slotId ? {
+      ...ns,
+      id: s.id
+    } : s);else if (choice === "below") next = oi >= 0 && oi + 1 < slots.length ? slots.map((s, i) => i === oi + 1 ? {
+      ...ns,
+      id: s.id
+    } : s) : slots.concat([ns]);else if (choice === "insert") next = oi >= 0 ? [...slots.slice(0, oi + 1), ns, ...slots.slice(oi + 1)] : slots.concat([ns]);else next = slots.concat([ns]);
+    store("edt2-slots", next);
+    setSlots(next);
+    setNav(null);
+    setSelected(null);
+  };
+  const [showImport, setShowImport] = useState(false);
+  const [icsText, setIcsText] = useState("");
+  const [sources, setSources] = useState([]);
+  const [teachers, setTeachers] = useState(PRELOADED_TEACHERS);
+  // 9 flux ICS officiels pour Â« â» Rafr. Â» : feeds.json en ligne si joignable et valide,
+  // sinon secours embarquÃ© (KNOWN_FEEDS) ; feedsSrc indique la provenance (onglet Flux).
+  const [feeds, setFeeds] = useState(KNOWN_FEEDS);
+  const [feedsSrc, setFeedsSrc] = useState("secours");
+  const [feedsYear, setFeedsYear] = useState(DATA_YEAR); // suite 107 : annÃ©e du fichier feeds utilisÃ©
+  const [feedsPending, setFeedsPending] = useState(null); // suite 107 : annÃ©e courante pas encore publiÃ©e â repli annÃ©e embarquÃ©e
+  // Suite 76 : flux en erreur au dernier â» (HTTP, Â« Page invalide Â», pas un ICS, vide,
+  // suspect < 25 %) â persistÃ© dans localStorage pour que la banniÃ¨re survive aux rechargements ;
+  // purgÃ©e au premier â» sans erreur. Chaque entrÃ©e : { name, msg, suspect? }.
+  const [feedErrs, setFeedErrs] = useState(() => {
+    const v = load("edt2-feederrs");
+    return Array.isArray(v) ? v : [];
+  });
+  // Suite 76 : remplacement d'URL par flux (l'utilisateur colle un lien ADE rÃ©gÃ©nÃ©rÃ© dans
+  // l'onglet Flux, sans attendre une publication) â { nomDuFlux: url }, conservÃ© en localStorage.
+  const [feedOverrides, setFeedOverrides] = useState(() => {
+    const v = load("edt2-feed-urls");
+    return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+  });
+  const [editFeed, setEditFeed] = useState(null); // nom du flux en cours d'Ã©dition dans l'onglet Flux
+  const [editFeedUrl, setEditFeedUrl] = useState("");
+  const [nameDraft, setNameDraft] = useState("");
+  const [urlDraft, setUrlDraft] = useState("");
+  const [srcTypeDraft, setSrcTypeDraft] = useState("promo"); // suite 83 : type du flux personnel en cours d'ajout (promo | ens)
+  const [lsErr, setLsErr] = useState(false); // suite 83 : au moins une sauvegarde a Ã©chouÃ© (quota/localStorage bloquÃ©) â banniÃ¨re + export conseillÃ©
+  const [settingsDraft, setSettingsDraft] = useState(""); // suite 83 : coller ici un export de rÃ©glages pour les restaurer
+  const [settingsDone, setSettingsDone] = useState(null); // suite 83 : "copied" | "ok" | "err" â retour d'export/import des rÃ©glages
+  const [importPending110, setImportPending110] = useState(null); // SUITE 110 : payload v2 validÃ© en attente de confirmation REMPLAÃANTE
+  const fileIn110 = useRef(null); // SUITE 110 : champ fichier cachÃ© Â« â§ Importer fichier Â» (input .json)
+  const [syncState, setSyncState] = useState("idle");
+  const [lastSync, setLastSync] = useState(null);
+  const [busySync, setBusySync] = useState(false); // Â« â» Rafr. Â» : tÃ©lÃ©chargement ICS en cours
+  const [firstSync, setFirstSync] = useState(false); // Suite 71 : premiÃ¨re synchro auto (1er lancement, aucune donnÃ©e)
+  const [viewMode, setViewMode] = useState("semaine");
+  // Suite 80 : vue Â« JournÃ©e Â» â ancre de jour globale (sÃ©lecteur, dÃ©faut aujourd'hui) ;
+  // chaque agenda garde son dÃ©calage dy (comme wk en vue semaine). Week-ends sautÃ©s.
+  const [jourSel, setJourSel] = useState(() => isoD(new Date()));
+  // Suite 82 : le sÃ©lecteur de date est ACTIF en vues Semaine et JournÃ©e â
+  // vue JournÃ©e : le jour choisi s'affiche ; vue Semaine : chaque agenda saute sur la
+  // SEMAINE contenant ce jour (dÃ©calage wk). Le jour reste mÃ©morisÃ© : basculer
+  // Semaine â JournÃ©e garde le mÃªme point temporel. GrisÃ© en PÃ©riode/Bilan.
+  const setJourAll = v => {
+    setJourSel(v);
+    setSlots(ls => ls.map(s => {
+      if (viewMode !== "semaine" || !v) return {
+        ...s,
+        dy: 0
+      };
+      const p = String(v).split("-").map(Number);
+      const d = new Date(p[0], p[1] - 1, p[2]);
+      const wkOff = Math.round((startOfWeek(d) - weekStart) / (7 * 864e5));
+      return {
+        ...s,
+        wk: wkOff,
+        dy: 0
+      };
+    }));
+  };
+  // Â« JournÃ©e Â» : ajuste la hauteur d'heure pour que la journÃ©e entiÃ¨re tienne Ã  l'Ã©cran (mobile).
+  const [vh, setVh] = useState(() => typeof window !== "undefined" && window.innerHeight || 800);
+  // Suite 64 : WIDE (affichage ordinateur) mis Ã  jour au resize â re-render garanti via wideTick.
+  const [, setWideTick] = useState(0);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.addEventListener !== "function") return;
+    const on = () => {
+      const w = window.innerWidth >= 1024;
+      if (w !== WIDE) {
+        WIDE = w;
+        setWideTick(t => t + 1);
+      }
+      setVh(window.innerHeight);
+    };
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, []);
+  const [fitDay, setFitDay] = useState(() => {
+    const v = load("edt2-fit");
+    return v === null ? typeof window !== "undefined" && window.innerWidth < 900 : v === "1";
+  });
+  const toggleFit = () => setFitDay(f => {
+    store("edt2-fit", f ? "0" : "1");
+    return !f;
+  });
+  // SUITE 134 : THÃME CLAIR (option) â prÃ©fÃ©rence MÃMORISÃE (edt2-light), dÃ©faut
+  // SOMBRE : personne ne voit de changement sans bascule explicite dans Options.
+  const [light134, setLight134] = useState(() => load("edt2-light") === "light");
   const toggleLight134 = () => setLight134(l => {
     store("edt2-light", l ? "dark" : "light");
     return !l;
@@ -3069,7 +4323,708 @@ function Kiosk132({
   const snapDy = n => {
     let k = n;
     let d = addDays(jourAnchorD(), k);
-    while (dng-none pt-px",
+    while (d.getDay() === 0 || d.getDay() === 6) {
+      k += k >= 0 ? 1 : -1;
+      d = addDays(jourAnchorD(), k);
+    }
+    return k;
+  };
+  // Suite 88 : vue JournÃ©e GLOBALE â le jour affichÃ© est TOUJOURS jourSel (week-end
+  // sautÃ© une fois) ; le dÃ©calage dy par agenda (suite 80) est abandonnÃ© : swipe, â¹ âº et
+  // Â« Auj. Â» dÃ©placent le jour du sÃ©lecteur, tous les agendas suivent, le compteur
+  // enseignant (suite 85, ancrÃ© sur jourSel) reste alignÃ©.
+  const slotDayStart = () => addDays(jourAnchorD(), snapDy(0));
+  const slotJourLabel = () => {
+    const d = slotDayStart();
+    return d.toLocaleDateString("fr-FR", {
+      weekday: "short",
+      day: "numeric",
+      month: "short"
+    }) + (WIDE ? " (" + d.toLocaleDateString("fr-FR", {
+      weekday: "long"
+    }) + ")" : "");
+  };
+  // suite 90 : un samedi est VISITABLE (vue JournÃ©e) s'il porte au moins un crÃ©neau (JPO du 5/12...) ;
+  // dimanche toujours exclu. Les semaines sans samedi Ã  Ã©vÃ©nements gardent le saut ven â lun.
+  const satHasEv = d => Object.values(allEvents).some(evs => evs.some(e => sameDay(e.start, d)));
+  const goJour = d => {
+    let x = jourAnchorD();
+    do {
+      x = addDays(x, d);
+    } while (x.getDay() === 0 || x.getDay() === 6 && !satHasEv(x));
+    setJourAll(isoD(x));
+  };
+  const goAuj = () => setJourAll(isoD(new Date()));
+  const rangeFor = slot => viewMode === "semaine" ? {
+    a: slotWeekStart(slot),
+    b: addDays(slotWeekStart(slot), 7)
+  } : viewMode === "jour" ? {
+    a: slotDayStart(slot),
+    b: addDays(slotDayStart(slot), 1)
+  } : {
+    a: pStartD(),
+    b: addDays(pEndD(), 1)
+  };
+  const colsFor = (groups, p) => {
+    const def = PROMOS[p].defaultCols;
+    if (!groups.length) return def;
+    const sel = groups.filter(g => !groups.some(h => groupAncestors(g, p).has(h)));
+    // Expansion jusqu'aux FEUILLES de l'arbre : MCPC â MA1, MA2, MB3, EA1 (via MA/MB/MAE).
+    const leaves = g => {
+      const k = PROMOS[p].tree[g] || [];
+      return k.length ? k.flatMap(leaves) : [g];
+    };
+    const cols = [];
+    sel.forEach(g => leaves(g).forEach(c => {
+      if (!cols.includes(c)) cols.push(c);
+    }));
+    cols.sort((a, b) => PROMO_DERIVED[p].order.indexOf(a) - PROMO_DERIVED[p].order.indexOf(b));
+    return cols.length ? cols : def;
+  };
+  const closureFor = (groups, p) => {
+    if (!groups.length) return null;
+    const u = new Set();
+    groups.forEach(g => groupClosure(g, p).forEach(x => u.add(x)));
+    return u;
+  };
+  const matchType = e => typeFilter === "Tous" || detectType(e) === typeFilter;
+  // Agenda virtuel (enseignant ou salle virtuelle, agrÃ©gats compris) : filtre on/off CM/TD/TP.
+  const isVirtSlot = slot => slot.kind === "teacher" && /virtuel/i.test(String(slot.teacher || "")) || slot.kind === "room" && /virtuel/i.test(String(slot.room || ""));
+  const virtShown = (slot, shown) => isVirtSlot(slot) ? shown.filter(e => virtF[evCat(e)]) : shown;
+  const slotData = slot => {
+    if (slot.kind === "promo") {
+      const rgP = rangeFor(slot);
+      const evs = (allEvents[slot.promo] || []).filter(e => e.start >= rgP.a && e.start < rgP.b);
+      const closure = closureFor(slot.groups, slot.promo);
+      const shown = evs.filter(e => (!closure || (e.groups || []).some(g => closure.has(gnrm(g)))) && matchType(e));
+      return {
+        shown,
+        cols: colsFor(slot.groups, slot.promo),
+        title: PROMOS[slot.promo].label + (slot.groups.length ? " Â· " + slot.groups.map(g => grpDisp(slot.promo, g)).join(", ") : " Â· Tous")
+      };
+    }
+    if (slot.kind === "teacher") {
+      // AgrÃ©gat Â« Enseignant virtuel Â» : fusion dÃ©doublonnÃ©e de TOUS les enseignants virtuels.
+      const tKeys = slot.teacher === VIRT_ENS_LABEL ? Object.keys(teachers).filter(isVirtEnsKey) : slot.teacher ? [slot.teacher] : [];
+      const seenT = new Set();
+      let evs = [];
+      for (const t of tKeys) for (const e of teachers[t] || []) {
+        const st = decDT(e.start);
+        const kT = st.getTime() + "|" + e.summary;
+        if (seenT.has(kT)) continue;
+        seenT.add(kT);
+        // SUITE 94 : marquage Â« appartient au dÃ©partement MP Â» (couple id ADE @ horodatage
+        // prÃ©sent dans les flux promos). v4 seulement (v2 figÃ©e, v3 proposeur) : le rose et
+        // le filtre ne concernent que le bilan personnel des flux Â« ens Â».
+        const gm94 = typeof e.groups === "string" ? e.groups ? e.groups.split(",") : [] : e.groups || []; // SUITE 95 : groupes normalises UNE fois
+        const w95 = {
+          ...e,
+          start: st,
+          end: decDT(e.end),
+          groups: gm94,
+          teacher: /virtuel/i.test(t) ? "" : t,
+          co: typeof e.co === "string" ? e.co.split(",") : e.co || undefined,
+          mp: PERSO_ENABLED ? evInMpMask(e, mpMask) : true
+        };
+        // SUITE 97 : le flux Â« ens Â» porte la liste COMPLETE des enseignants dans e.teacher ; la case d'agenda
+        // l'Ã©crase par le nom de la ressource -> mpCours est calculÃ© avec la liste ORIGINALE pour que la garde
+        // multi-enseignants (multiTch : jurys, conseils) refonctionne. co et l'affichage restent inchangÃ©s.
+        w95.mpCours = PERSO_ENABLED ? persoTypeOf({
+          ...w95,
+          teacher: typeof e.teacher === "string" && e.teacher.includes(" / ") ? e.teacher : w95.teacher
+        }) !== "exclu" : true;
+        evs.push(w95);
+      }
+      if (PERSO_ENABLED && mpOnly) evs = evs.filter(e => e.mp !== false); // SUITE 94 : mode MP masque les crÃ©neaux hors dÃ©partement ; mode Tout (dÃ©faut) affiche tout (rose)
+      evs = evs.sort((a, b) => a.start - b.start);
+      const rgT = rangeFor(slot);
+      return {
+        shown: virtShown(slot, evs.filter(e => e.start >= rgT.a && e.start < rgT.b)),
+        cols: ["Â·"],
+        title: slot.teacher ? dispName(slot.teacher) : "â choisir un enseignant â"
+      };
+    }
+    if (slot.kind === "cours") {
+      const evs = [];
+      for (const p of PROMO_KEYS) for (const e of allEvents[p] || []) if (norm(e.summary) === norm(slot.course)) evs.push({
+        ...e,
+        promo: p
+      });
+      const rgC = rangeFor(slot);
+      return {
+        shown: evs.filter(e => e.start >= rgC.a && e.start < rgC.b),
+        cols: ["Â·"],
+        title: slot.course ? "Cours Â· " + slot.course : "â chercher un cours â"
+      };
+    }
+    // AgrÃ©gat Â« Salle virtuelle Â» : fusion dÃ©doublonnÃ©e de TOUTES les salles virtuelles (bdd + .ics).
+    const roomKeys = slot.room === VIRT_ROOM_LABEL ? Object.keys(PRELOADED_ROOMS).concat(Object.keys(roomsExt)).filter((r, i, a) => isVirtRoomKey(r) && a.indexOf(r) === i) : slot.room ? [slot.room] : [];
+    const baseRoom = [];
+    const dupB = new Set();
+    if (baseRoomsActive) for (const r of roomKeys) (PRELOADED_ROOMS[r] || []).forEach((e, i) => {
+      // suite 75b : figÃ© que sans reconstruction Â« full Â»
+      const s = decDT(e[0]);
+      const kR = s.getTime() + "|" + e[2];
+      if (dupB.has(kR)) return;
+      dupB.add(kR);
+      const tn = (e[3] === null || e[3] === undefined ? [] : String(e[3]).split(".")).map(p => /^\d+$/.test(p) ? TEACHER_NAMES[+p] || "" : p).filter(Boolean);
+      baseRoom.push({
+        id: r + "#" + i,
+        summary: e[2],
+        start: s,
+        end: new Date(s.getTime() + e[1] * 6e4),
+        location: r,
+        groups: e[4] ? e[4].split(",") : [],
+        teacher: tn[0] || "",
+        co: tn.length > 1 ? tn.slice(1) : undefined
+      });
+    });
+    const extRoom = [];
+    for (const r of roomKeys) (roomsExt[r] || []).forEach((e, i) => {
+      const kR = new Date(e.start).getTime() + "|" + e.summary;
+      if (dupB.has(kR)) return;
+      dupB.add(kR);
+      extRoom.push({
+        id: r + "~ics" + i,
+        summary: e.summary,
+        start: new Date(e.start),
+        end: new Date(e.end),
+        location: e.location || r,
+        groups: e.groups || [],
+        teacher: e.teacher || ""
+      });
+    });
+    // Suite 71 : les crÃ©neaux des PROMOS (flux ICS, allEvents) indexent AUSSI les salles â
+    // champ Â« location Â» (salles sÃ©parÃ©es par des virgules), dÃ©doublonnÃ© vs bdd/RSS par
+    // date|titre. En v2/v3 sans base embarquÃ©e, c'est la source principale des salles.
+    const icsRoom = [];
+    for (const p of PROMO_KEYS) for (const e of allEvents[p] || []) {
+      const locs = String(e.location || "").split(",").map(x => x.trim()).filter(Boolean);
+      if (!locs.some(r => roomKeys.includes(r))) continue;
+      const kR = e.start.getTime() + "|" + e.summary;
+      if (dupB.has(kR)) continue;
+      dupB.add(kR);
+      icsRoom.push({
+        id: p + "#" + e.id + "~ev",
+        summary: e.summary,
+        start: e.start,
+        end: e.end,
+        location: e.location,
+        groups: e.groups || [],
+        teacher: e.teacher || "",
+        promo: p
+      });
+    }
+    const rgR = rangeFor(slot);
+    return {
+      shown: virtShown(slot, baseRoom.concat(extRoom, icsRoom).filter(e => e.start >= rgR.a && e.start < rgR.b)),
+      cols: ["Â·"],
+      title: slot.room || "â choisir une salle â"
+    };
+  };
+  const boundsFor = shown => {
+    if (!shown.length) return {
+      min: 8,
+      max: 19
+    };
+    let mn = 24,
+      mx = 0;
+    for (const e of shown) {
+      mn = Math.min(mn, e.start.getHours());
+      mx = Math.max(mx, e.end.getHours() + (e.end.getMinutes() ? 1 : 0));
+    }
+    return {
+      min: Math.max(0, Math.min(8, mn)),
+      max: Math.min(24, Math.max(19, mx))
+    };
+  };
+  const today = new Date();
+  const slotWkLabel = slot => {
+    const s0 = slotWeekStart(slot);
+    const rng = (WIDE ? s0.toLocaleDateString("fr-FR", {
+      weekday: "short"
+    }) + " " : "") + s0.toLocaleDateString("fr-FR", {
+      day: "numeric",
+      month: "short"
+    }) + " â " + (WIDE ? addDays(s0, 6).toLocaleDateString("fr-FR", {
+      weekday: "short"
+    }) + " " : "") + addDays(s0, 6).toLocaleDateString("fr-FR", {
+      day: "numeric",
+      month: "short"
+    });
+    return (slot.wk || 0) === 0 ? rng : rng + " (" + ((slot.wk || 0) > 0 ? "+" : "") + slot.wk + ")";
+  };
+  const totalPre = PROMO_KEYS.reduce((s, p) => s + (allEvents[p] || []).length, 0);
+
+  // ---- index pour l'autocomplÃ©tion des barres d'agenda (cours, salles, enseignants, groupes) ----
+  const courseIndex = useMemo(() => {
+    const m = {};
+    for (const p of PROMO_KEYS) for (const e of allEvents[p] || []) {
+      if (!e.summary) continue;
+      const k = norm(e.summary);
+      m[k] = m[k] || {
+        label: e.summary,
+        n: 0
+      };
+      m[k].n++;
+    }
+    return m;
+  }, [allEvents]);
+  const groupIndex = useMemo(() => {
+    const m = {};
+    for (const p of PROMO_KEYS) for (const e of allEvents[p] || []) for (const g of e.groups || []) {
+      if (!g) continue;
+      const k = norm(g);
+      m[k] = m[k] || {
+        label: g,
+        n: 0,
+        promo: null
+      };
+      m[k].n++;
+      if (!m[k].promo) m[k].promo = promoOfGroup(g, p) || p;
+    }
+    return m;
+  }, [allEvents]);
+  // Suite 71 : index des salles â base embarquÃ©e (v4) + capture RSS (roomsExt) +
+  // CRÃNEAUX ICS (champ location de chaque Ã©vÃ©nement, salles sÃ©parÃ©es par des virgules).
+  // En v2/v3 sans base embarquÃ©e, c'est la seule source : les salles vivent avec les flux.
+  // Suite 75b : la base salles figÃ©e ne nourrit les agendas salles et l'occIndex (badges n/N)
+  // QUE tant qu'aucune reconstruction complÃ¨te (Â« full Â») n'a eu lieu. AprÃ¨s un â», le live
+  // (flux promos + RSS roomsExt) prend le relais : un crÃ©neau salle dÃ©placÃ©/supprimÃ© cÃ´tÃ© ADE
+  // ne reste plus une occurrence fantÃ´me (gel du 15/11 â badges gonflÃ©s Ã  vie).
+  const baseRoomsActive = useMemo(() => !PROMO_KEYS.some(p => load("edt2-events-full:" + p) === 2), [allEvents, teachers, roomsExt]);
+  const roomIndex = useMemo(() => {
+    const m = {};
+    const add = (r, n) => {
+      const k = String(r || "").trim();
+      if (!k) return;
+      m[k] = m[k] || {
+        label: k,
+        n: 0
+      };
+      m[k].n += n;
+    };
+    for (const r of Object.keys(PRELOADED_ROOMS)) add(r, (PRELOADED_ROOMS[r] || []).length);
+    for (const r of Object.keys(roomsExt)) add(r, (roomsExt[r] || []).length);
+    for (const p of PROMO_KEYS) for (const e of allEvents[p] || []) for (const loc of String(e.location || "").split(",")) add(loc, 1);
+    return m;
+  }, [allEvents, roomsExt]);
+  // Suite 74b : index des enseignants reconstruit comme roomIndex â la v2/v3 n'a plus de base
+  // embarquÃ©e (PRELOADED_TEACHERS vide) et la capture RSS oublie des vacataires : sans ce repli
+  // sur les flux live, les noms d'enseignants du popup restaient grisÃ©s (non cliquables).
+  const teacherIndex = useMemo(() => {
+    const m = {};
+    const add = t => {
+      const k = String(t || "").trim();
+      if (!k) return;
+      m[k] = m[k] || {
+        n: 0
+      };
+      m[k].n += 1;
+    };
+    for (const t of Object.keys(PRELOADED_TEACHERS)) m[t] = {
+      n: (PRELOADED_TEACHERS[t] || []).length
+    };
+    for (const t of Object.keys(teachers)) for (const e of teachers[t] || []) add(t);
+    for (const p of PROMO_KEYS) for (const e of allEvents[p] || []) for (const t of String(e.teacher || "").split(" / ")) add(t.trim());
+    for (const r of Object.keys(roomsExt)) for (const e of roomsExt[r] || []) add(e.teacher);
+    return m;
+  }, [allEvents, teachers, roomsExt, baseRoomsActive]);
+  // badge n/N : position de la sÃ©ance parmi les occurrences du mÃªme cours, par groupe et par enseignant.
+  // Groupes Â« Etud-XXX Â» normalisÃ©s via gk() ; flux enseignant et salle AUSSI indexÃ©s (rÃ©unions,
+  // crÃ©neaux hors promo, co-intervenants) avec dÃ©doublonnage des horodatages (ICS âª RSS).
+  const occIndex = useMemo(() => {
+    const seq = {}; // promo|cours|groupe (sÃ©rie principale)
+    const seqG = {}; // cours|groupe (secours, sans promo)
+    const seqT = {}; // promo|cours|enseignant|sÃ©rie du groupe (badge y/7 : MON rang)
+    const seqU = {}; // cours|enseignant|sÃ©rie (secours, sans promo)
+    const seqK = {}; // cours|enseignant|type (badge Â« total : z/T Â» : MES sÃ©ances du mÃªme type)
+    // Suite 87 : AVTECHÃTP â clÃ©s de sÃ©rie Ã  numÃ©roter PAR SOUS-SÃRIE (badge n/N local
+    // au bloc de 3 semaines) avec rang annuel anK/anN pour le badge Â« an k/K Â».
+    const avP = new Set(); // clÃ©s seq (p|s|g)
+    const avT = new Set(); // clÃ©s seqT (p|s|kt|g)
+    const avTP = (e, p) => p === "MP-3A-AVTECH" && detectType(e) === "TP";
+    const add = (e, p, withT) => {
+      if (!e || !e.summary) return;
+      const s = norm(e.summary);
+      const ts = e.start.getTime();
+      const grps = e.groups || [];
+      const g = serKey(e, p);
+      if (avTP(e, p)) avP.add(p + "|" + s + "|" + g); // suite 87
+      (seqG[s + "|" + g] = seqG[s + "|" + g] || []).push(ts);
+      if (p) (seq[p + "|" + s + "|" + g] = seq[p + "|" + s + "|" + g] || []).push(ts);
+      // regroupement PARTIEL (pas toute la promo) : indexe aussi chaque groupe pris isolÃ©ment
+      const pp = p || promoSrcOf(e) || promoOfGroup(grps[0] || ""); // SUITE 131 : Ã©tiquette d'origine avant supposition
+      if (grps.length > 1 && !(pp && coversPromo(grps, pp))) for (const x of grps) {
+        const gg = gk(x);
+        if (avTP(e, p)) avP.add(p + "|" + s + "|" + gg); // suite 87 : groupe isolÃ© aussi
+        (seqG[s + "|" + gg] = seqG[s + "|" + gg] || []).push(ts);
+        if (p) (seq[p + "|" + s + "|" + gg] = seq[p + "|" + s + "|" + gg] || []).push(ts);
+      }
+      if (withT) {
+        const tch = (e.teacher || "").trim();
+        if (tch) {
+          const kt = norm(tch);
+          const multi = tch.includes(" / ");
+          // sÃ©rie enseignant = sÃ©rie de la sÃ©ance (parent/combinaison via serKey) : le badge
+          // enseignant compte la mÃªme sÃ©rie que le badge groupe (CM â  suivi du mÃªme cours).
+          if (p) {
+            if (avTP(e, p)) avT.add(p + "|" + s + "|" + kt + "|" + g);
+            (seqT[p + "|" + s + "|" + kt + "|" + g] = seqT[p + "|" + s + "|" + kt + "|" + g] || []).push(ts);
+          } // suite 87 : badge enseignant aussi par sous-sÃ©rie
+          (seqU[s + "|" + kt + "|" + g] = seqU[s + "|" + kt + "|" + g] || []).push(ts);
+          // badge Â« total : z/T Â» : mes sÃ©ances du MÃME TYPE (TD avec TD, TP avec TP, CM avec CM)
+          // pour ce cours, tous groupes confondus â une seule personne, types TD/TP/CM uniquement.
+          if (!multi) {
+            const ty = detectType(e);
+            if (ty === "TD" || ty === "TP" || ty === "CM") (seqK[s + "|" + kt + "|" + ty] = seqK[s + "|" + kt + "|" + ty] || []).push(ts);
+          }
+        }
+      }
+    };
+    for (const p of PROMO_KEYS) for (const e of allEvents[p] || []) add(e, p, true);
+    for (const t of Object.keys(teachers)) for (const e of teachers[t] || []) add({
+      ...e,
+      start: decDT(e.start),
+      groups: typeof e.groups === "string" ? e.groups ? e.groups.split(",") : [] : e.groups || [],
+      teacher: e.teacher && String(e.teacher).trim() || t
+    }, null, true);
+    if (baseRoomsActive) for (const r of Object.keys(PRELOADED_ROOMS)) for (const e of PRELOADED_ROOMS[r] || []) add({
+      summary: e[2],
+      start: decDT(e[0]),
+      groups: e[4] ? String(e[4]).split(",") : [],
+      teacher: e[3] === null || e[3] === undefined ? "" : String(e[3]).split(".").map(x => /^\d+$/.test(x) ? TEACHER_NAMES[+x] || "" : x).filter(Boolean)[0] || ""
+    }, null, true); // suite 75b
+    for (const r of Object.keys(roomsExt)) for (const e of roomsExt[r] || []) add({
+      summary: e.summary,
+      start: new Date(e.start),
+      groups: e.groups || [],
+      teacher: e.teacher || ""
+    }, null, true);
+    const pos = {};
+    // Suite 87 : fill â si la clÃ© est AVTECHÃTP, badges PAR SOUS-SÃRIE (splitByGap,
+    // rupture > 21 j) et RANG ANNUEL anK/anN conservÃ© pour Â« an k/K Â» Ã  cÃ´tÃ© du prof.
+    const fillKey = (src, pre, kk, avSet) => {
+      const ts = [...new Set(src[kk])].sort((a, b) => a - b);
+      if (avSet && avSet.has(kk)) {
+        const subs = splitByGap(ts, AV_TP_SPLIT_GAP);
+        let an = 0;
+        for (const sub of subs) for (let i = 0; i < sub.length; i++) {
+          an++;
+          pos[pre + kk + "@" + sub[i]] = {
+            n: i + 1,
+            N: sub.length,
+            next: sub.filter(x => x > sub[i]).slice(0, 3),
+            anK: an,
+            anN: ts.length
+          };
+        }
+      } else {
+        for (let i = 0; i < ts.length; i++) pos[pre + kk + "@" + ts[i]] = {
+          n: i + 1,
+          N: ts.length,
+          next: ts.filter(x => x > ts[i]).slice(0, 3)
+        };
+      }
+    };
+    const fill = (src, pre, avSet) => {
+      for (const kk of Object.keys(src)) fillKey(src, pre, kk, avSet);
+    };
+    fill(seq, "p", avP);
+    fill(seqG, "g");
+    fill(seqK, "k");
+    // badge enseignant p/q (suite 20) : NUMÃRATEUR = rang de la sÃ©ance parmi MES sÃ©ances de la
+    // sÃ©rie du groupe, DÃNOMINATEUR = MON nombre de sÃ©ances pour CE groupe (ex. : TP Optique
+    // MA1 : 2/6 alors que la sÃ©rie en compte 7 â le total de la sÃ©rie reste visible via le badge
+    // groupe n/N ; une sÃ©ance unique pour ce groupe masque le badge, comme pour le badge groupe).
+    const uniqCnt = a => new Set(a).size;
+    for (const src of [seqT, seqU]) fill(src, src === seqT ? "t" : "u", src === seqT ? avT : null);
+    return pos;
+  }, [allEvents, teachers, roomsExt, baseRoomsActive]);
+  const occOf = (e, promo, mode, grp) => {
+    if (!e || !e.summary) return null;
+    const s = norm(e.summary);
+    const ts = e.start.getTime();
+    const p = promo || promoSrcOf(e) || promoOfGroup((e.groups || [])[0] || ""); // SUITE 131 : Ã©tiquette d'origine avant supposition
+    if (mode === "t") {
+      const tch = (e.teacher || "").trim();
+      if (!tch) return null;
+      const k = norm(tch);
+      const gt = serKey(e, p);
+      return p && occIndex["t" + p + "|" + s + "|" + k + "|" + gt + "@" + ts] || occIndex["u" + s + "|" + k + "|" + gt + "@" + ts] || null;
+    }
+    if (mode === "k") {
+      const tch = (e.teacher || "").trim();
+      if (!tch || tch.includes(" / ")) return null;
+      const ty = detectType(e);
+      if (ty !== "TD" && ty !== "TP" && ty !== "CM") return null;
+      return occIndex["k" + s + "|" + norm(tch) + "|" + ty + "@" + ts] || null;
+    }
+    const g = grp !== undefined ? gk(grp) : serKey(e, p);
+    return p && occIndex["p" + p + "|" + s + "|" + g + "@" + ts] || occIndex["g" + s + "|" + g + "@" + ts] || null;
+  };
+  const occFor = (e, promo) => occOf(e, promo, "g");
+
+  // ---- Suite 73 : alertes de sÃ©rie incomplÃ¨te (TD/TP) ----
+  // RÃ©fÃ©rence d'une sÃ©rie = le MAX des comptes de ses groupes ; un groupe en dessous = dÃ©ficit
+  // (sÃ©ances non assurÃ©es). Couleur : JAUNE = une sÃ©ance dÃ©jÃ  vue a disparu (annulation non
+  // remplacÃ©e â historique localStorage edt2-serhist, ne fait que grossir) ; ROUGE = dÃ©ficit
+  // d'origine, jamais vu plus haut (oubli ADE). Un groupe rouge qui perd une sÃ©ance devient jaune.
+  // Ne compte que les crÃ©neaux des flux PROMO (les flux enseignants dupliquent les mÃªmes
+  // horodatages et leur promo infÃ©rÃ©e peut Ãªtre ambiguÃ« â l'ICS promo est la source de vÃ©ritÃ©).
+  const seriesInfo = useMemo(() => {
+    const cnt = {}; // promo|cours|type|groupe â Set(horodatages)
+    const hrs = {}; // suite 74 : idem â HEURES cumulÃ©es (3Ã2 h â¡ 4Ã1,5 h : le dÃ©ficit se juge en heures)
+    const add = (e, p) => {
+      if (!e || !e.summary || !p) return;
+      const ty = evTypeOf(e, p);
+      if (ty !== "TD" && ty !== "TP") return;
+      const grps = e.groups || [];
+      if (!grps.length || coversPromo(grps, p)) return; // promo entiÃ¨re : pas une sÃ©rie de groupe
+      const g = serKey(e, p);
+      if (!g) return;
+      const k = p + "|" + norm(e.summary) + "|" + ty + "|" + g;
+      (cnt[k] = cnt[k] || new Set()).add(e.start.getTime());
+      hrs[k] = Math.round(((hrs[k] || 0) + (e.end - e.start) / 3600000) * 4) / 4;
+    };
+    for (const p of PROMO_KEYS) for (const e of allEvents[p] || []) add(e, p);
+    const hist = load("edt2-serhist-h") || {};
+    const fam = {}; // promo|cours|type â membres
+    for (const k of Object.keys(cnt)) {
+      const fk = k.slice(0, k.lastIndexOf("|"));
+      (fam[fk] = fam[fk] || []).push({
+        k,
+        g: k.slice(k.lastIndexOf("|") + 1),
+        n: cnt[k].size,
+        h: hrs[k] || 0
+      });
+    }
+    const deficit = {};
+    for (const fk of Object.keys(fam)) {
+      const grp = fam[fk];
+      if (grp.length < 2) continue;
+      const ref = Math.max(...grp.map(x => x.n));
+      const refH = Math.max(...grp.map(x => x.h));
+      for (const x of grp) {
+        if (x.h >= refH - 0.001) continue; // suite 74 : dÃ©ficit = HEURES du groupe < max des heures de la sÃ©rie
+        const missingH = Math.round((refH - x.h) * 4) / 4;
+        const redCount = Math.max(1, Math.min(Math.ceil(missingH / Math.max(x.n ? x.h / x.n : 1.5, 0.25)), Math.max(ref - x.n, 1)));
+        deficit[x.k] = {
+          g: x.g,
+          n: x.n,
+          ref,
+          h: x.h,
+          refH,
+          missingH,
+          redCount,
+          color: hist[x.k] !== undefined && x.h < hist[x.k] - 0.001 ? "jaune" : "rouge"
+        };
+      }
+    }
+    return {
+      counts: cnt,
+      hours: hrs,
+      deficit
+    };
+  }, [allEvents, teachers, roomsExt, baseRoomsActive]);
+  // Historique des comptes (max vu) : posÃ© APRÃS le calcul â la couleur se lit sur l'Ã©tat
+  // PRÃCÃDENT (une baisse entre deux synchros = sÃ©ance retirÃ©e = jaune).
+  useEffect(() => {
+    const hist = load("edt2-serhist-h") || {};
+    let ch = false;
+    for (const k of Object.keys(seriesInfo.counts)) {
+      const n = Math.round((seriesInfo.hours[k] || 0) * 4) / 4; // suite 74 : historique en HEURES
+      if ((hist[k] || 0) < n - 0.001) {
+        hist[k] = n;
+        ch = true;
+      }
+    }
+    if (ch) store("edt2-serhist-h", hist);
+  }, [seriesInfo]);
+  // alerte du crÃ©neau : sÃ©rie TD/TP incomplÃ¨te du groupe de CE crÃ©neau (null = complÃ¨te).
+  // suite 74 : promo ROBUSTE â depuis un agenda enseignant, la promo du slot est souvent la
+  // valeur par dÃ©faut : on essaie la promo infÃ©rÃ©e du groupe, puis celle passÃ©e en argument.
+  const alertFor = (e, promo) => {
+    if (!e || !e.summary) return null;
+    const grps = e.groups || [];
+    if (!grps.length) return null;
+    for (const p of [...new Set([promoSrcOf(e) || promoOfGroup(grps[0] || ""), promo].filter(Boolean))]) {
+      // SUITE 131 : Ã©tiquette d'origine incluse
+      if (coversPromo(grps, p)) continue;
+      const ty = evTypeOf(e, p);
+      if (ty !== "TD" && ty !== "TP") continue;
+      const d = seriesInfo.deficit[p + "|" + norm(e.summary) + "|" + ty + "|" + serKey(e, p)];
+      if (d) return d;
+    }
+    return null;
+  };
+
+  // ---- Suite 73 : planning de la ressource (helpers d'ouverture) ----
+  // suite 74 : pour un agenda enseignant/salle, la promo du groupe PRIME sur celle du slot
+  // (le slot garde sa promo par dÃ©faut â clÃ©s deficit et coversPromo fausses).
+  const planPromoOf = ev => ev.slotKind === "promo" || ev.slotKind === "cours" ? ev.promo || ev.slotPromo : promoSrcOf(ev) || promoOfGroup((ev.groups || [])[0] || "") || ev.slotPromo || null; // SUITE 131 : Ã©tiquette d'origine avant supposition
+  const openPlan = opts => {
+    const ev = opts.ev || selected;
+    if (!ev) return;
+    const p = planPromoOf(ev);
+    setPlan({
+      ev,
+      promo: p,
+      anchor: opts.anchor !== undefined ? opts.anchor : serKey(ev, p),
+      hl: !!opts.hl,
+      allOpen: !!opts.allOpen
+    });
+    setPlanT(opts.focus ? [opts.focus] : []);
+    setPlanHide(false);
+    setPlanOpen(null);
+    setPlanAll(opts.allOpen ? true : null);
+  };
+  const closePlan = () => {
+    setPlan(null);
+    setPlanT([]);
+    setPlanHide(false);
+    setPlanOpen(null);
+    setPlanAll(null);
+  };
+  const togglePlanT = t => {
+    const has = planT.includes(t);
+    const nxt = has ? planT.filter(x => x !== t) : planT.concat([t]);
+    setPlanT(nxt);
+    if (nxt.length === 0 || !has && planT.length === 0) setPlanHide(false); // dÃ©sÃ©lection totale ou nouvelle sÃ©lection depuis vide â surbrillance
+  };
+  const syncChip = () => {
+    if (syncState === "loading") return {
+      cls: "bg-slate-500/10 text-slate-300 border-slate-400/30",
+      label: "Synchronisationâ¦"
+    };
+    if (syncState === "ok" && lastSync) return {
+      cls: "bg-emerald-500/10 text-emerald-300 border-emerald-400/30",
+      label: "SynchronisÃ©" + (sources.length ? " (" + sources.length + " flux)" : " (ADE en direct)") + " Ã  " + fmtHM(lastSync)
+    };
+    if (syncState === "partial" && lastSync) return {
+      cls: "bg-amber-500/10 text-amber-300 border-amber-400/30",
+      label: "Synchro partielle Ã  " + fmtHM(lastSync)
+    };
+    if (syncState === "blocked") return {
+      cls: "bg-amber-500/10 text-amber-300 border-amber-400/30",
+      label: "AccÃ¨s direct bloquÃ©"
+    };
+    if (syncState === "error") return {
+      cls: "bg-amber-500/10 text-amber-300 border-amber-400/30",
+      label: "Flux vide ou invalide"
+    };
+    return null;
+  };
+  const chip = syncChip();
+
+  // grille hebdomadaire d'un agenda
+  // hauteur d'heure : 48 px en mode dÃ©filant ; en Â« journÃ©e ajustÃ©e Â», hauteur d'Ã©cran
+  // disponible rÃ©partie sur les heures affichÃ©es (bornÃ©e 26-48 px pour rester lisible).
+  // Les seuils de maquette (horaireÂ·salle 3 h, groupe 45 min, enseignant 1 h 30) suivent la mÃªme Ã©chelle.
+  const gridFor = (slot, shown, cols, bounds) => {
+    const hours = [];
+    const nH = Math.max(1, bounds.max - bounds.min);
+    const rowH = fitDay ? Math.max(16, Math.min(48, Math.floor((avail || vh - 360) / nH))) : 48;
+    const sc = rowH / 48;
+    const th144 = Math.round(144 * sc),
+      th36 = Math.round(36 * sc),
+      th72 = Math.round(72 * sc);
+    // Suite 81 : en vue JournÃ©e les cases sont LARGES â une case promo courte (CM 1h)
+    // a la place d'afficher ses dÃ©tails : horaireÂ·salle dÃ¨s 45 min, enseignant dÃ¨s 30 min
+    // (au lieu de ~3 h / ~1 h 30). Les seuils hauteur restent pour la vue semaine.
+    const thT = viewMode === "jour" ? Math.round(45 * sc) : th144;
+    const thE = viewMode === "jour" ? Math.round(30 * sc) : th72;
+    // SUITE 130 (spec recette 24/11) : palier Â« case XL Â» â une case assez LARGE (estimation
+    // â¥ 150 px : bureau maximisÃ©, un groupe affichÃ©, hors cases fines multi-colonnes) affiche
+    // plus d'infos par palier, mÃªme sur un crÃ©neau d'1 h. Principe : une case LARGE est honnÃªte
+    // avec sa hauteur â elle adopte les seuils dÃ©tendus de la vue JournÃ©e (horaireÂ·salle dÃ¨s
+    // 45 min, enseignant dÃ¨s 30 min de hauteur de case), le titre peut prendre 3 lignes, les
+    // groupes et la ligne enseignant peuvent WRAPPER sur 2 lignes (au lieu de tronquer), et
+    // l'enseignant reÃ§oit son badge Â« total z/T Â» (ses sÃ©ances du mÃªme type pour ce cours,
+    // tous groupes â jusqu'ici visible uniquement dans le popup de dÃ©tail). Les seuils des
+    // cases Ã©troites (mobile, multi-colonnes serrÃ©es) sont INCHANGÃS : le palier ne s'active
+    // que sur la place mesurÃ©e, jamais par la taille de la fenÃªtre seule.
+    const wks = slotWeekStart(slot);
+    // Suite 80 : vue Â« JournÃ©e Â» â une seule colonne de jour : chaque groupe de groupe
+    // reÃ§oit toute la largeur (promos complÃ¨tes lisibles), navigation jour par jour.
+    // Suite 80 : colonne des heures rÃ©trÃ©cie (32 px) â les cases collent aux heures.
+    const isJour = viewMode === "jour";
+    const anchor = isJour ? slotDayStart(slot) : wks;
+    // suite 90 : 6e colonne Â« Sam Â» UNIQUEMENT si des crÃ©neaux existent le samedi de cette semaine (JPO, portes ouvertes)
+    const satCol = !isJour && shown.some(e => e.start.getDay() === 6);
+    const nd = isJour ? 1 : satCol ? 6 : 5;
+    // SUITE 130 : largeur estimÃ©e d'une colonne-jour (fenÃªtre plafonnÃ©e 1700 px cÃ´tÃ© appli, â 96 px de marges + colonne des heures).
+    const estDayPx130 = Math.max(80, (Math.min(typeof window !== "undefined" && window.innerWidth ? window.innerWidth : 1280, 1700) - 96) / nd);
+    const tmpl = "grid-cols-[32px_repeat(" + nd + ",1fr)]";
+    for (let h = bounds.min; h < bounds.max; h++) hours.push(h);
+    const isPromo = slot.kind === "promo";
+    return /*#__PURE__*/React.createElement("div", {
+      className: "overflow-hidden",
+      onTouchStart: ev => {
+        const t = ev.touches[0];
+        touchRef.current = {
+          x: t.clientX,
+          y: t.clientY
+        };
+      },
+      onTouchEnd: ev => {
+        const st = touchRef.current;
+        touchRef.current = null;
+        if (!st) return;
+        const t = ev.changedTouches[0];
+        const dx = t.clientX - st.x,
+          dy2 = t.clientY - st.y;
+        if (Math.abs(dx) > 40 && Math.abs(dx) > 1.5 * Math.abs(dy2)) {
+          if (viewMode === "jour") goJour(dx < 0 ? 1 : -1);else updSlot(slot.id, {
+            wk: (slot.wk || 0) + (dx < 0 ? 1 : -1)
+          });
+        } // suite 88 : swipe = JOUR GLOBAL (vue JournÃ©e) ou semaine par agenda (vue Semaine)
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "grid " + tmpl + " border-b border-slate-800/60"
+    }, /*#__PURE__*/React.createElement("div", null), [...Array(nd).keys()].map(i => {
+      // suite 89 : le jour de semaine de l'en-tÃªte vient de la DATE d (vue JournÃ©e : plus de Â« Lun Â» figÃ© par index)
+      const d = addDays(anchor, i);
+      return /*#__PURE__*/React.createElement("div", {
+        key: i,
+        className: "border-l border-slate-800 text-center py-0.5 " + (sameDay(d, today) ? "head-today" : "text-slate-400")
+      }, /*#__PURE__*/React.createElement("span", {
+        className: "text-[10px] font-semibold"
+      }, d.toLocaleDateString("fr-FR", {
+        weekday: "short"
+      }).replace(".", "").replace(/^./, c => c.toUpperCase()), " ", d.getDate(), "/", d.getMonth() + 1), vacOf(d) && /*#__PURE__*/React.createElement("span", {
+        className: "ml-1 text-[9px] text-amber-300 font-semibold"
+      }, "â ", vacOf(d)));
+    })), isPromo && /*#__PURE__*/React.createElement("div", {
+      className: "grid " + tmpl + " border-b border-slate-800/60"
+    }, /*#__PURE__*/React.createElement("div", null), [...Array(nd).keys()].map(i => /*#__PURE__*/React.createElement("div", {
+      key: i,
+      className: "border-l border-slate-800 grid",
+      style: {
+        gridTemplateColumns: "repeat(" + cols.length + ",1fr)"
+      }
+    }, cols.map(g => {
+      const info = colInfo(g, slot.promo);
+      return /*#__PURE__*/React.createElement("div", {
+        key: g,
+        className: "text-center px-0.5 py-1 border-r border-slate-950/40 last:border-r-0",
+        style: {
+          color: "var(--fam-" + (FAM[PROMO_FAMILY[slot.promo] || "dept"] ? PROMO_FAMILY[slot.promo] || "dept" : "dept") + "-hue)",
+          backgroundColor: "var(--fam-" + (FAM[PROMO_FAMILY[slot.promo] || "dept"] ? PROMO_FAMILY[slot.promo] || "dept" : "dept") + "-bg)",
+          borderBottom: "2px " + (info.tp ? "dashed" : info.td ? "dotted" : "solid") + " var(--fam-" + (FAM[PROMO_FAMILY[slot.promo] || "dept"] ? PROMO_FAMILY[slot.promo] || "dept" : "dept") + "-hue)"
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        className: "text-[8px] uppercase tracking-wider opacity-70 leading-tight"
+      }, grpDisp(slot.promo, info.opt)), /*#__PURE__*/React.createElement("div", {
+        className: "text-[10px] font-bold leading-tight"
+      }, grpDisp(slot.promo, info.td)), /*#__PURE__*/React.createElement("div", {
+        className: "text-[9px] leading-tight opacity-80"
+      }, grpDisp(slot.promo, info.tp)));
+    })))), /*#__PURE__*/React.createElement("div", {
+      className: "relative grid " + tmpl
+    }, /*#__PURE__*/React.createElement("div", null, hours.map(h => /*#__PURE__*/React.createElement("div", {
+      key: h,
+      className: "text-[10px] text-slate-500 border-b border-slate-800/50 pl-1 pr-1 text-right leading-none pt-px",
       style: {
         height: rowH + "px"
       }
@@ -3844,7 +5799,496 @@ function Kiosk132({
     }
   }), /*#__PURE__*/React.createElement("span", {
     className: "text-[11px] text-slate-500"
-  }, pDayCount(), " j. ouvrÃ©s")), /*#__PURE__*ionne comme avant. */
+  }, pDayCount(), " j. ouvrÃ©s")), /*#__PURE__*/React.createElement("span", {
+    className: "flex items-center gap-1.5"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    value: jourSel,
+    onChange: e => setJourAll(e.target.value),
+    disabled: viewMode !== "semaine" && viewMode !== "jour",
+    title: "Choisir un jour : vue JournÃ©e â ce jour s'affiche ; vue Semaine â chaque agenda saute sur la semaine de ce jour (mÃ©morisÃ© entre les vues)",
+    className: "bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-slate-200 disabled:opacity-40",
+    style: {
+      colorScheme: "dark"
+    }
+  })), /*#__PURE__*/React.createElement("span", {
+    className: "relative"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setDevoirsMenu(m => !m),
+    title: "Devoirs par promotion : Ã©valuations de l'annÃ©e (devoirs, examens, contrÃ´les, interrogations, soutenances), Ã©coulÃ©s en gris",
+    className: "bg-slate-900 text-slate-300 border border-slate-700 hover:border-slate-500 hover:text-slate-200 transition rounded-lg px-2 py-1 text-[11px] font-medium"
+  }, "Devoirs â¾"), devoirsMenu && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "fixed inset-0 z-40",
+    onClick: () => setDevoirsMenu(false)
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "absolute right-0 top-full mt-1 z-50 bg-slate-900 border border-slate-700 rounded-xl shadow-xl py-1 min-w-[150px]"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      setDevoirsMenu(false);
+      setDevoirsWkRef(startOfWeek(new Date()));
+    },
+    title: "Devoirs de la semaine en cours, toutes promos confondues â regroupÃ©s par jour, soutenances en sÃ©quences repliables, flÃ¨ches pour les semaines voisines",
+    className: "flex items-center justify-between gap-2 w-full text-left text-[11.5px] text-amber-300 hover:bg-slate-800 px-3 py-1.5 rounded-sm border-b border-slate-800"
+  }, /*#__PURE__*/React.createElement("span", null, "â Cette semaine Â· toutes promos"), /*#__PURE__*/React.createElement("span", {
+    className: "text-[10px] text-slate-500 tabular-nums"
+  }, devoirsWeekCount)), PROMO_KEYS.map(p => /*#__PURE__*/React.createElement("button", {
+    key: p,
+    onClick: () => {
+      setDevoirsMenu(false);
+      setDevoirsPromo(p);
+    },
+    className: "flex items-center justify-between gap-2 w-full text-left text-[11.5px] text-slate-200 hover:bg-slate-800 px-3 py-1.5"
+  }, /*#__PURE__*/React.createElement("span", null, PROMOS[p].label, PROMOS[p].sub ? " " + PROMOS[p].sub : ""), /*#__PURE__*/React.createElement("span", {
+    className: "text-[10px] text-slate-500 tabular-nums"
+  }, devoirsCount[p] || 0)))))), BILAN_ENABLED && /*#__PURE__*/React.createElement("button", {
+    onClick: () => setViewMode("bilan"),
+    title: "Bilan de charge pÃ´le physique : rÃ©alisÃ© ADE vs prÃ©visionnel, par module ScoDoc",
+    className: "text-[11px] font-medium rounded-lg px-2.5 py-1 border transition " + (viewMode === "bilan" ? "bg-indigo-400 text-slate-900 border-indigo-400" : "bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500")
+  }, "Bilan"), /*#__PURE__*/React.createElement("button", {
+    onClick: toggleFit,
+    title: "Ajuster la hauteur Ã  l'Ã©cran (sinon dÃ©filement, 48 px par heure) â rÃ©glage d'affichage, pas une vue",
+    className: "text-[11px] font-medium rounded-lg px-2 py-1 border transition " + (fitDay ? "bg-slate-100 text-slate-900 border-slate-100" : "bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500")
+  }, "â¤¢"), chip && /*#__PURE__*/React.createElement("span", {
+    className: "text-[10px] rounded-full px-2 py-0.5 border " + chip.cls
+  }, chip.label), sources.length > 0 && /*#__PURE__*/React.createElement("button", {
+    onClick: () => syncSources(sources),
+    className: "text-[10px] font-medium bg-slate-800 hover:bg-slate-700 border border-slate-700 transition rounded-lg px-2 py-1"
+  }, syncState === "loading" ? "â¦" : "Actualiser"))), majAvail && /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      try {
+        location.reload();
+      } catch (e) {}
+    },
+    title: "Une nouvelle publication a Ã©tÃ© dÃ©tectÃ©e en arriÃ¨re-plan â cliquer pour recharger l'appli (l'affichage actuel reste utilisable, aucune donnÃ©e perdue)",
+    className: "w-full text-left flex items-center gap-2 flex-wrap bg-amber-400/10 text-amber-300 border border-amber-400/45 hover:border-amber-300 rounded-lg px-2.5 py-1 text-[11px] font-medium transition mb-1.5"
+  }, /*#__PURE__*/React.createElement("span", null, "â» MAJ disponible"), /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-400 font-normal"
+  }, "nouvelle publication dÃ©tectÃ©e â cliquer ici (ou Â« â» ", WIDE ? "RafraÃ®chir" : "Rafr.", " Â») pour recharger l'appli ; l'affichage actuel reste utilisable.")), PERSO_ENABLED && new Date().getMonth() === 6 && new Date().getDate() <= 20 && favs.some(f => f && f.s && f.s.kind === "teacher" && f.s.teacher && !isVirtEnsKey(f.s.teacher)) && /*#__PURE__*/React.createElement("div", {
+    className: "w-full flex items-center gap-2 flex-wrap bg-amber-500/10 text-amber-300 border border-amber-400/40 rounded-lg px-2.5 py-1 text-[11px] font-medium mb-1.5"
+  }, /*#__PURE__*/React.createElement("span", null, "â AnnÃ©e qui s'achÃ¨ve"), /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-400 font-normal"
+  }, "un dernier rafraÃ®chissement avant la bascule clÃ´turera ton annÃ©e ", SCHOOL_YEAR, " (archivage automatique au premier chargement d'aoÃ»t)")), feedErrs.length > 0 && /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      try {
+        setShowImport(true);
+      } catch (e) {}
+    },
+    title: "Au moins un flux officiel ADE est en erreur (lien mort ou page invalide). Cliquer pour ouvrir l'onglet Flux : Ã©tat dÃ©taillÃ© par flux et remplacement du lien possible.",
+    className: "w-full text-left flex items-center gap-2 flex-wrap bg-rose-500/10 text-rose-300 border border-rose-400/45 hover:border-rose-300 rounded-lg px-2.5 py-1 text-[11px] font-medium transition mb-1.5"
+  }, /*#__PURE__*/React.createElement("span", null, "â  Flux en erreur"), /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-400 font-normal"
+  }, feedErrs.length, " flux officiel", feedErrs.length > 1 ? "s" : "", " inaccessible", feedErrs.length > 1 ? "s" : "", " au dernier rafraÃ®chissement (", [...new Set(feedErrs.map(x => x.name))].join(", "), ") â voir l'onglet Flux pour le motif et remplacer le lien si besoin.")), syncState === "blocked" && /*#__PURE__*/React.createElement("div", {
+    className: "mb-3 text-xs bg-amber-500/10 text-amber-200 border border-amber-400/30 rounded-lg px-3 py-2.5"
+  }, "Le relais des flux ADE est injoignable (ou ADE ne rÃ©pond pas). Les derniÃ¨res donnÃ©es restent affichÃ©es : rÃ©essayez plus tard, ou importez un fichier .ics manuellement."), syncState === "error" && /*#__PURE__*/React.createElement("div", {
+    className: "mb-3 text-xs bg-amber-500/10 text-amber-200 border border-amber-400/30 rounded-lg px-3 py-2.5"
+  }, "Les flux ont rÃ©pondu mais ne contiennent aucun Ã©vÃ©nement exploitable sur la pÃ©riode en cours."), totalPre === 0 && busySync && /*#__PURE__*/React.createElement("div", {
+    className: "mb-3 text-xs bg-emerald-500/10 text-emerald-200 border border-emerald-400/30 rounded-lg px-3 py-2.5"
+  }, "PremiÃ¨re synchronisation en cours : tÃ©lÃ©chargement de l'emploi du temps depuis ADE (quelques secondes)â¦"), totalPre === 0 && !busySync && syncState !== "loading" && /*#__PURE__*/React.createElement("div", {
+    className: "mb-3 text-xs bg-amber-500/10 text-amber-200 border border-amber-400/30 rounded-lg px-3 py-2.5"
+  }, "Aucune donnÃ©e pour l'instant : appuie sur Â« â» Â» pour synchroniser l'emploi du temps depuis ADE (nÃ©cessite une connexion)."), totalPre > 0 && lastSync && !busySync && Date.now() - lastSync.getTime() > 24 * 36e5 && Date.now() - lastSync.getTime() <= 48 * 36e5 && /*#__PURE__*/React.createElement("div", {
+    className: "mb-2 text-[11px] text-slate-400 border border-slate-700 rounded-lg px-2.5 py-1.5"
+  }, "DerniÃ¨re synchronisation : ", lastSync.toLocaleDateString("fr-FR"), " Ã  ", fmtHM(lastSync), " â une synchro Â« â» Â» est conseillÃ©e (l'emploi du temps Ã©volue d'une semaine Ã  l'autre)."), viewMode === "bilan" && BILAN_ENABLED && !bilanCfg137 ? /*#__PURE__*/React.createElement("div", {
+    className: "rounded-2xl border border-slate-800 bg-slate-900/60 p-3 md:p-4"
+  }, /*#__PURE__*/React.createElement("h2", {
+    className: "text-sm font-bold mb-1"
+  }, "Bilan de charge"), /*#__PURE__*/React.createElement("p", {
+    className: "text-[11px] text-slate-400 leading-relaxed mb-2"
+  }, "Aucune configuration de Bilan importÃ©e sur cet appareil. La vue Â« Bilan Â» compare le rÃ©alisÃ© ADE Ã  un prÃ©visionnel par module ScoDoc : importe le fichier JSON de ta config (bouton ci-dessous) pour la restaurer. La config reste locale Ã  cet appareil (localStorage) et peut Ãªtre exportÃ©e ou retirÃ©e Ã  tout moment."), /*#__PURE__*/React.createElement("div", {
+    className: "flex flex-wrap items-center gap-2"
+  }, /*#__PURE__*/React.createElement("label", {
+    className: "text-[11px] font-semibold rounded px-2.5 py-1 border bg-slate-900 text-slate-200 border-slate-600 hover:border-slate-400 cursor-pointer"
+  }, "ð Importer la config (JSON)", /*#__PURE__*/React.createElement("input", {
+    type: "file",
+    accept: ".json,application/json",
+    className: "hidden",
+    onChange: ev => {
+      const f = ev.target.files && ev.target.files[0];
+      if (!f) return;
+      const r = new FileReader();
+      r.onload = () => {
+        try {
+          const c = bilanParseCfg137(JSON.parse(String(r.result || "")));
+          bilanSaveCfg137(c);
+          setBilanCfg137(c);
+        } catch (x) {
+          window.alert("Config Bilan invalide : " + (x && x.message ? x.message : "JSON illisible"));
+        }
+      };
+      r.readAsText(f);
+      ev.target.value = "";
+    }
+  })))) : null, viewMode === "bilan" && BILAN_ENABLED && bilanCfg137 ? (() => {
+    // barre mini rÃ©alisÃ©/prÃ©vu d'une catÃ©gorie ; Ã©cart colorÃ© (vert â¤ 5 %, ambre â¤ 15 %)
+    const catBar = (label, real, prev, extra) => {
+      const ecCls = prev ? Math.abs(real / prev - 1) <= 0.05 ? "text-emerald-400" : Math.abs(real / prev - 1) <= 0.15 ? "text-amber-400" : "text-red-400" : "";
+      const ecTxt = prev ? (real >= prev ? "+" : "") + Math.round((real / prev - 1) * 100) + " %" : "";
+      return /*#__PURE__*/React.createElement("span", {
+        className: "inline-flex items-center gap-1",
+        title: label + " : rÃ©alisÃ© " + fmtBilanH(real) + (prev ? " Â· prÃ©vu " + fmtBilanH(prev) : "") + (extra ? " Â· " + extra : "")
+      }, /*#__PURE__*/React.createElement("span", {
+        className: "text-[9px] font-bold w-[18px] " + (label === "CM" ? "text-sky-400" : label === "TD" ? "text-amber-400" : "text-violet-400")
+      }, label), /*#__PURE__*/React.createElement("span", {
+        className: "h-2 rounded-full bg-slate-800 w-14 md:w-20 overflow-hidden inline-block align-middle"
+      }, /*#__PURE__*/React.createElement("span", {
+        className: "h-2 rounded-full inline-block align-top " + (label === "CM" ? "bg-sky-400" : label === "TD" ? "bg-amber-400" : "bg-violet-400"),
+        style: {
+          width: (prev ? Math.min(140, 100 * real / prev) : Math.min(100, real / 4)) + "%"
+        }
+      })), /*#__PURE__*/React.createElement("span", {
+        className: "text-[10px] text-slate-200 tabular-nums"
+      }, fmtBilanH(real), prev ? /*#__PURE__*/React.createElement("span", {
+        className: "text-slate-500"
+      }, " / ", fmtBilanH(prev)) : null), prev ? /*#__PURE__*/React.createElement("span", {
+        className: "text-[9.5px] font-semibold tabular-nums " + ecCls
+      }, ecTxt) : /*#__PURE__*/React.createElement("span", {
+        className: "text-[9px] text-slate-600"
+      }, "prÃ©vu ?"));
+    };
+    const grouped = [];
+    for (const row of bilanRows) {
+      let g = grouped[grouped.length - 1];
+      if (!g || g.blk !== row.L.block) {
+        g = {
+          blk: row.L.block,
+          rows: []
+        };
+        grouped.push(g);
+      }
+      g.rows.push(row);
+    }
+    return /*#__PURE__*/React.createElement("div", {
+      className: "rounded-2xl border border-slate-800 bg-slate-900/60 p-3 md:p-4"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "flex flex-wrap items-baseline gap-x-2 mb-1"
+    }, /*#__PURE__*/React.createElement("h2", {
+      className: "text-sm font-bold"
+    }, "Bilan de charge", bilanCfg137 && bilanCfg137.titre ? " â " + bilanCfg137.titre : ""), /*#__PURE__*/React.createElement("span", {
+      className: "text-[10px] text-slate-400"
+    }, "rÃ©alisÃ© = ADE (MAJ ", DATA_DATE, ") Â· Ã©valuations exclues Â· CiTiSE affichÃ© Ã  part (prÃ©pa intÃ©grÃ©e)")), /*#__PURE__*/React.createElement("div", {
+      className: "flex flex-wrap items-center gap-2 mb-2"
+    }, /*#__PURE__*/React.createElement("label", {
+      className: "text-[10px] font-semibold rounded px-2 py-1 border bg-slate-900 text-slate-200 border-slate-600 hover:border-slate-400 cursor-pointer",
+      title: "Remplacer la config par un autre fichier JSON"
+    }, "ð Remplacer", /*#__PURE__*/React.createElement("input", {
+      type: "file",
+      accept: ".json,application/json",
+      className: "hidden",
+      onChange: ev => {
+        const f = ev.target.files && ev.target.files[0];
+        if (!f) return;
+        const r = new FileReader();
+        r.onload = () => {
+          try {
+            const c = bilanParseCfg137(JSON.parse(String(r.result || "")));
+            bilanSaveCfg137(c);
+            setBilanCfg137(c);
+          } catch (x) {
+            window.alert("Config Bilan invalide : " + (x && x.message ? x.message : "JSON illisible"));
+          }
+        };
+        r.readAsText(f);
+        ev.target.value = "";
+      }
+    })), /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        const raw = load(BILAN_CFG_KEY_137);
+        const txt = typeof raw === "string" ? raw : JSON.stringify(raw);
+        const url = URL.createObjectURL(new Blob([txt], {
+          type: "application/json"
+        }));
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "edt-mp-bilan-config.json";
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+      title: "Exporter la config Bilan actuelle (JSON, pour la rÃ©importer ailleurs ou aprÃ¨s une rÃ©installation)",
+      className: "text-[10px] font-medium bg-slate-900 text-slate-300 border border-slate-700 hover:border-slate-500 rounded px-2 py-1"
+    }, "â© Exporter"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        store(BILAN_CFG_KEY_137, null);
+        setBilanCfg137(null);
+        setBilanOpen(null);
+      },
+      title: "Retirer la config Bilan de cet appareil (retour Ã  la vue d import)",
+      className: "text-[10px] font-medium bg-slate-900 text-rose-300 border border-rose-400/40 hover:border-rose-300 rounded px-2 py-1"
+    }, "â Retirer")), /*#__PURE__*/React.createElement("p", {
+      className: "text-[10px] text-slate-500 mb-3"
+    }, "PrÃ©vu = toutes sÃ©ries confondues (CM/TD Ã groupes, TP Ã sous-groupes). Pastille : ", /*#__PURE__*/React.createElement("span", {
+      className: "text-emerald-400 font-semibold"
+    }, "vert â¤ 5 % d'Ã©cart"), " Â· ", /*#__PURE__*/React.createElement("span", {
+      className: "text-amber-400 font-semibold"
+    }, "ambre â¤ 15 %"), " Â· ", /*#__PURE__*/React.createElement("span", {
+      className: "text-red-400 font-semibold"
+    }, "rouge au-delÃ "), " Â· gris = rÃ©alisÃ© seul ou EDT non saisi. Cliquez une ligne pour le dÃ©tail par groupe et enseignant ; Â« prÃ©vu ? Â» = prÃ©visionnel absent du fichier."), /*#__PURE__*/React.createElement("div", {
+      className: "flex flex-col gap-4"
+    }, grouped.map(g => {
+      const w = (bilanCfg137 && bilanCfg137.BILAN_WIN || {})[g.rows[0].L.win] || ["â", "â"];
+      return /*#__PURE__*/React.createElement("div", {
+        key: g.blk
+      }, /*#__PURE__*/React.createElement("div", {
+        className: "flex flex-wrap items-baseline gap-x-2 mb-1.5"
+      }, /*#__PURE__*/React.createElement("h3", {
+        className: "text-[12px] font-semibold text-indigo-300"
+      }, g.blk), /*#__PURE__*/React.createElement("span", {
+        className: "text-[9.5px] text-slate-500"
+      }, String(w[0]).split("-").reverse().join("/"), " â ", String(w[1]).split("-").reverse().join("/"))), /*#__PURE__*/React.createElement("div", {
+        className: "flex flex-col gap-1"
+      }, g.rows.map(row => {
+        const P = row.L.prevu,
+          dot = bilanDot(row),
+          open = bilanOpen === row.L.code + row.L.win;
+        return /*#__PURE__*/React.createElement("div", {
+          key: row.L.code + row.L.win,
+          className: "rounded-xl border px-2.5 py-1.5 transition " + (open ? "border-indigo-400/50 bg-slate-800/60" : "border-slate-800 hover:border-slate-600")
+        }, /*#__PURE__*/React.createElement("div", {
+          className: "flex flex-wrap items-center gap-x-3 gap-y-1 cursor-pointer",
+          onClick: () => setBilanOpen(open ? null : row.L.code + row.L.win)
+        }, /*#__PURE__*/React.createElement("span", {
+          className: "font-mono text-[10px] font-bold text-indigo-300 w-[52px] shrink-0"
+        }, row.L.code), /*#__PURE__*/React.createElement("span", {
+          className: "text-[11.5px] text-slate-200 flex-1 min-w-[150px]"
+        }, row.L.titre), /*#__PURE__*/React.createElement("span", {
+          className: "flex flex-wrap items-center gap-x-2.5 gap-y-0.5"
+        }, catBar("CM", row.re.cm, P ? P.cm : null, row.L.note), catBar("TD", row.re.td, P ? P.td : null), catBar("TP", row.re.tp, P ? P.tp : null)), /*#__PURE__*/React.createElement("span", {
+          className: "text-[9.5px] font-semibold shrink-0 " + dot.cls
+        }, "â ", dot.txt), /*#__PURE__*/React.createElement("span", {
+          className: "text-slate-600 text-[10px]"
+        }, open ? "â¾" : "â¸")), open && /*#__PURE__*/React.createElement("div", {
+          className: "mt-2 border-t border-slate-700/60 pt-2 flex flex-col gap-2"
+        }, row.L.note && /*#__PURE__*/React.createElement("p", {
+          className: "text-[10.5px] text-amber-200/80 leading-snug"
+        }, "â ", row.L.note), row.n === 0 && /*#__PURE__*/React.createElement("p", {
+          className: "text-[10.5px] text-slate-500"
+        }, "Aucun crÃ©neau ADE sur la fenÃªtre (EDT non saisi ou cours Ã  venir) : pas d'alerte."), row.grps.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
+          className: "text-[9.5px] font-semibold text-slate-400 mb-1"
+        }, "Par groupe (", row.grps.length, ")"), /*#__PURE__*/React.createElement("div", {
+          className: "flex flex-wrap gap-1"
+        }, row.grps.map(o => /*#__PURE__*/React.createElement("span", {
+          key: o.g,
+          className: "text-[9.5px] bg-slate-900 border border-slate-700 rounded-lg px-1.5 py-0.5 tabular-nums",
+          title: "CM " + fmtBilanH(o.cm) + " Â· TD " + fmtBilanH(o.td) + " Â· TP " + fmtBilanH(o.tp)
+        }, o.g, " : ", /*#__PURE__*/React.createElement("span", {
+          className: "text-sky-300"
+        }, fmtBilanH(o.cm)), "/", /*#__PURE__*/React.createElement("span", {
+          className: "text-amber-300"
+        }, fmtBilanH(o.td)), "/", /*#__PURE__*/React.createElement("span", {
+          className: "text-violet-300"
+        }, fmtBilanH(o.tp)))))), row.tchs.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
+          className: "text-[9.5px] font-semibold text-slate-400 mb-1"
+        }, "Par enseignant (", row.tchs.length, ") â info, sans alerte"), /*#__PURE__*/React.createElement("div", {
+          className: "flex flex-wrap gap-1"
+        }, row.tchs.map(o => /*#__PURE__*/React.createElement("span", {
+          key: o.t,
+          className: "text-[9.5px] bg-slate-900 border border-slate-700 rounded-lg px-1.5 py-0.5 tabular-nums"
+        }, dispName(o.t), " : ", /*#__PURE__*/React.createElement("span", {
+          className: "text-sky-300"
+        }, fmtBilanH(o.cm)), "/", /*#__PURE__*/React.createElement("span", {
+          className: "text-amber-300"
+        }, fmtBilanH(o.td)), "/", /*#__PURE__*/React.createElement("span", {
+          className: "text-violet-300"
+        }, fmtBilanH(o.tp))))))));
+      })));
+    })));
+  })() : /*#__PURE__*/React.createElement("div", {
+    className: "flex flex-col gap-4"
+  }, slots.map((slot, idx) => {
+    const data = slotData(slot);
+    const bounds = boundsFor(data.shown);
+    const shownCount = data.shown.length;
+    const nowD = new Date();
+    const busyNow = slot.kind === "room" && slot.room && data.shown.concat(data.shown).some(e => sameDay(e.start, nowD) && e.start <= nowD && e.end > nowD);
+    const sugg = suggForSlot(slot);
+    return /*#__PURE__*/React.createElement("div", {
+      key: slot.id,
+      ref: idx === 0 ? firstGridRef : null,
+      className: "rounded-2xl border border-slate-800 bg-slate-900/60"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "flex flex-wrap items-center gap-1.5 px-3 py-2 border-b border-slate-800"
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => updSlot(slot.id, {
+        collapsed: !slot.collapsed
+      }),
+      title: slot.collapsed ? "DÃ©plier" : "RÃ©duire",
+      className: "bg-slate-900 border border-slate-700 hover:border-slate-500 rounded-lg w-7 h-7 flex items-center justify-center transition text-xs"
+    }, slot.collapsed ? "â¸" : "â¾"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => toggleFav(slot),
+      title: isFav(slot) ? "â Retirer des favoris (cet agenda ne s'ouvrira plus par dÃ©faut)" : "â Favori : ouvrir cet agenda par dÃ©faut Ã  l'ouverture de l'App",
+      className: (isFav(slot) ? "text-amber-300 hover:text-amber-200" : "text-slate-500 hover:text-amber-300") + " text-base leading-none px-0.5 transition"
+    }, isFav(slot) ? "â" : "â"), /*#__PURE__*/React.createElement("span", {
+      className: "text-xs font-semibold text-slate-100 truncate"
+    }, data.title), diff && diff.items.length > 0 && diffCountFor(slot) > 0 && /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        setDiffFilter(slot);
+        setShowDiff(true);
+      },
+      title: "Changements ADE depuis ta derniÃ¨re synchro qui concernent cet agenda (" + diffCountFor(slot) + ") â clic pour le dÃ©tail filtrÃ©",
+      className: "text-[10px] font-medium text-amber-300 bg-amber-400/10 border border-amber-400/40 hover:border-amber-300 rounded-full px-1.5 py-0.5 transition shrink-0"
+    }, "Î ", diffCountFor(slot)), isVirtSlot(slot) && /*#__PURE__*/React.createElement("span", {
+      className: "flex items-center gap-1",
+      title: "Filtres de cet agenda virtuel : par dÃ©faut, seuls les CM/TD/TP sans enseignant rÃ©el sont affichÃ©s"
+    }, [["cours", "CM/TD/TP"], ["dev", "Devoirs"], ["autre", "Autres"]].map(([vfK, vfLb]) => /*#__PURE__*/React.createElement("button", {
+      key: vfK,
+      onClick: () => toggleVirtF(vfK),
+      className: "text-[10px] font-medium rounded px-1.5 py-0.5 border transition whitespace-nowrap " + (virtF[vfK] ? "bg-slate-100 text-slate-900 border-slate-100" : "bg-slate-900 text-slate-400 border-slate-700 hover:border-slate-500")
+    }, vfLb, virtF[vfK] ? " â" : ""))), PERSO_ENABLED && slot.kind === "teacher" && !isVirtSlot(slot) && /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        setMpOnly(!mpOnly);
+        store("edt2-mp-only", mpOnly ? 0 : 1);
+      },
+      title: "Suivi du dÃ©partement : Tout = tous les crÃ©neaux du flux enseignant, y compris hors MP (affichÃ©s en rose) Â· MP = seuls les crÃ©neaux du dÃ©partement MP. MÃªme rÃ©glage pour la Î£ SynthÃ¨se (persistÃ© sur cet appareil).",
+      className: "text-[10px] font-medium rounded px-1.5 py-0.5 border transition whitespace-nowrap " + (mpOnly ? "bg-slate-100 text-slate-900 border-slate-100" : "bg-slate-900 text-slate-400 border-slate-700 hover:border-slate-500")
+    }, mpOnly ? "MP â" : "Tout"), slot.kind === "room" && slot.room && slot.room !== VIRT_ROOM_LABEL && /*#__PURE__*/React.createElement("span", {
+      className: "text-[10px] font-medium rounded px-1.5 py-0.5 border " + (busyNow ? "bg-rose-500/15 text-rose-300 border-rose-400/40" : "bg-emerald-500/15 text-emerald-300 border-emerald-400/40")
+    }, busyNow ? "occupÃ©e" : "libre", " maintenant"), /*#__PURE__*/React.createElement("div", {
+      className: "ml-auto flex items-center gap-1.5"
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: shareLink,
+      title: "Copier le lien de partage : cette URL ouvre l'App exactement sur ces agendas (elle prime sur les favoris et le dernier Ã©tat)",
+      className: (shareDone ? "text-emerald-300 " : "text-slate-500 hover:text-indigo-300 ") + "text-sm leading-none px-0.5 transition"
+    }, shareDone ? "â" : "â§"), (viewMode === "semaine" || viewMode === "jour") && /*#__PURE__*/React.createElement("span", {
+      className: "flex items-center gap-0.5"
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => viewMode === "jour" ? goJour(-1) : updSlot(slot.id, {
+        wk: (slot.wk || 0) - 1
+      }),
+      className: "bg-slate-900 border border-slate-700 hover:border-slate-500 rounded-lg w-6 h-6 flex items-center justify-center text-[11px]"
+    }, "â¹"), /*#__PURE__*/React.createElement("span", {
+      className: "text-[10px] text-slate-400 whitespace-nowrap px-0.5 inline-block min-w-[86px] text-center"
+    }, viewMode === "jour" ? slotJourLabel() : slotWkLabel(slot)), /*#__PURE__*/React.createElement("button", {
+      onClick: () => viewMode === "jour" ? goJour(1) : updSlot(slot.id, {
+        wk: (slot.wk || 0) + 1
+      }),
+      className: "bg-slate-900 border border-slate-700 hover:border-slate-500 rounded-lg w-6 h-6 flex items-center justify-center text-[11px]"
+    }, "âº"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => viewMode === "jour" ? goAuj() : updSlot(slot.id, {
+        wk: 0
+      }),
+      title: viewMode === "jour" ? "Revenir Ã  aujourd'hui" : "Revenir Ã  la semaine en cours",
+      className: "text-[10px] font-medium bg-slate-900 border border-slate-700 hover:border-slate-500 rounded-lg px-1.5 py-1 transition whitespace-nowrap"
+    }, WIDE ? "Aujourd'hui" : "Auj.")), slots.length > 1 && /*#__PURE__*/React.createElement("button", {
+      onClick: () => removeSlot(slot.id),
+      title: "Retirer cet agenda",
+      className: "text-slate-500 hover:text-rose-300 text-sm leading-none px-1"
+    }, "â"))), /*#__PURE__*/React.createElement("div", {
+      className: "flex items-center gap-1.5 px-3 py-1.5 border-b border-slate-800/70"
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: toggleGrp145,
+      title: grpOpen145 ? "Replier le bandeau des groupes" : "DÃ©plier le bandeau des groupes (promos et groupes cliquables ; un clic convertit cet agenda en agenda Ãtudiant)",
+      className: "text-[10px] font-semibold rounded-lg px-2 py-1 transition border shrink-0 " + (grpOpen145 ? "bg-indigo-400 text-slate-900 border-indigo-400" : "bg-slate-950 text-slate-400 border-slate-700 hover:border-slate-500")
+    }, "Ãtudiant ", grpOpen145 ? "â¾" : "â¸"), /*#__PURE__*/React.createElement("div", {
+      className: "relative flex-1 min-w-[140px]"
+    }, /*#__PURE__*/React.createElement("svg", {
+      className: "absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500 z-10",
+      fill: "none",
+      viewBox: "0 0 24 24",
+      stroke: "currentColor",
+      strokeWidth: "2"
+    }, /*#__PURE__*/React.createElement("circle", {
+      cx: "11",
+      cy: "11",
+      r: "7"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "m20 20-3.5-3.5"
+    })), /*#__PURE__*/React.createElement("input", {
+      value: slotQ[slot.id] || "",
+      onChange: e => {
+        const v = e.target.value;
+        setSlotQ(m => ({
+          ...m,
+          [slot.id]: v
+        }));
+        setSlotQOpen(m => ({
+          ...m,
+          [slot.id]: true
+        }));
+      },
+      onFocus: () => setSlotQOpen(m => ({
+        ...m,
+        [slot.id]: true
+      })),
+      onBlur: () => setTimeout(() => setSlotQOpen(m => ({
+        ...m,
+        [slot.id]: false
+      })), 150),
+      placeholder: barPh(),
+      className: "w-full bg-slate-950 border border-slate-700 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/30 outline-none rounded-lg pl-7 pr-3 py-1 text-xs placeholder:text-slate-500 transition"
+    }), slotQOpen[slot.id] && sugg.length > 0 && /*#__PURE__*/React.createElement("div", {
+      className: "absolute z-30 left-0 right-0 top-full mt-1 rounded-xl border border-slate-700 bg-slate-900 shadow-2xl max-h-56 overflow-y-auto"
+    }, sugg.map(s => /*#__PURE__*/React.createElement("button", {
+      key: s.kind + ":" + s.label,
+      onMouseDown: e => {
+        e.preventDefault();
+        applyPick(slot.id, s);
+      },
+      className: "w-full text-left px-3 py-1.5 hover:bg-slate-800 flex items-center gap-2 border-b border-slate-800/60 last:border-b-0"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "text-[9px] uppercase rounded px-1.5 py-0.5 border " + (s.kind === "salle" ? "bg-amber-500/15 text-amber-300 border-amber-400/40" : s.kind === "enseignant" ? "bg-sky-500/15 text-sky-300 border-sky-400/40" : s.kind === "cours" ? "bg-indigo-500/15 text-indigo-300 border-indigo-400/40" : "bg-emerald-500/15 text-emerald-300 border-emerald-400/40")
+    }, s.kind === "enseignant" ? "Ens" : s.kind.charAt(0).toUpperCase() + s.kind.slice(1)), /*#__PURE__*/React.createElement("span", {
+      className: "text-xs text-slate-100 truncate"
+    }, s.txt, /virtuel/i.test(s.label) ? /*#__PURE__*/React.createElement("span", {
+      className: s.kind === "enseignant" ? "text-sky-300" : "text-amber-300",
+      title: s.kind === "enseignant" ? "â  Enseignant virtuel" : "â  Salle virtuelle"
+    }, " â ") : null), /*#__PURE__*/React.createElement("span", {
+      className: "text-[10px] text-slate-500 ml-auto whitespace-nowrap"
+    }, s.hint)))))), !slot.collapsed && /*#__PURE__*/React.createElement(React.Fragment, null, grpOpen145 && PROMOS[slot.promo] && /*#__PURE__*/React.createElement("div", {
+      className: "px-3 py-2.5 border-b border-slate-800/70"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "flex flex-wrap items-center gap-1 mb-1"
+    }, PROMO_KEYS.map(p =>
+    /*#__PURE__*/
+    /* SUITE 144 : pastille În du NÅUD PROMO (LCA) Ã  cÃ´tÃ© du bouton â
+       cliquer la pastille ouvre le modal du diff filtrÃ© sur la promo et
+       la marque Â« vue Â» (le bouton promo lui-mÃªme continue Ã  changer de promo). */
+    React.createElement("div", {
+      key: p,
+      className: "flex items-center gap-0.5"
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => updSlot(slot.id, {
+        kind: "promo",
+        promo: p,
+        groups: PROMOS[p].defaultCols.includes("MA1") ? ["MA1"] : []
+      }),
+      className: "text-xs font-semibold rounded-lg px-2 py-1 border transition " + (slot.kind === "promo" && slot.promo === p ? "bg-indigo-400 text-slate-900 border-indigo-400" : "bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500")
+    }, WIDE ? PROMOS[p].label : PROMOS[p].short || PROMOS[p].label), diffNodeBadge144(p, "") > 0 && /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        setDiffFilter({
+          kind: "promo",
+          promo: p,
+          groups: []
+        });
+        setShowDiff(true);
+      },
+      title: "Changements ADE qui touchent TOUTE la promo " + PROMOS[p].label + " (" + diffNodeBadge144(p, "") + ") â clic pour le dÃ©tail",
+      className: "text-[10px] font-medium text-amber-300 bg-amber-400/10 border border-amber-400/40 hover:border-amber-300 rounded-full px-1.5 py-0.5 transition shrink-0"
+    }, "Î ", diffNodeBadge144(p, ""))))), /*#__PURE__*/React.createElement("div", {
+      className: "flex flex-wrap items-center gap-1"
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => updSlot(slot.id, {
+        kind: "promo",
+        groups: []
+      }),
+      title: "Tous les groupes",
+      className: "font-medium rounded-lg px-2 py-1 border transition text-[11px] " + (slot.kind === "promo" && !slot.groups.length ? "bg-slate-100 text-slate-900 border-slate-100" : "bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500")
+    }, "Tous"), PROMOS[slot.promo].chips.map(cat =>
+    /*#__PURE__*/
+    /* flex-wrap sur la catÃ©gorie : sans lui, la rangÃ©e TP BUT1 (9 boutons, ex. D1318)
+       est un bloc insÃ©cable qui dÃ©borde de l'Ã©cran mobile. */
+    React.createElement("span", {
+      key: cat.label,
+      className: "flex flex-wrap items-center gap-1" + (cat.gap ? " ml-2" : "") + (cat.row ? " basis-full" : "")
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "hidden sm:inline text-[10px] uppercase tracking-wide text-slate-500"
+    }, cat.label), cat.items.map(g => {
+      const gs = g.split("|");
+      const on = slot.kind === "promo" && gs.every(x => slot.groups.includes(x));
+      const n144 = gs.reduce((s, x) => s + diffNodeBadge144(slot.promo, x), 0);
+      return (
+        /*#__PURE__*/
+        /* SUITE 144 : pastille În du NÅUD LCA sur la chip du groupe â A1-6 seul ne
+           marque QUE A1-6, jamais A ni BUT1 ; chip composite (TD A|B) = somme des
+           nÅuds du chip. Clic pastille â modal filtrÃ© (fermeture de groupes 79/80)
+           + nÅud marquÃ© Â« vu Â». Le bouton groupe lui-mÃªme sÃ©lectionne comme avant. */
         React.createElement("span", {
           key: g,
           className: "flex items-center gap-0.5"
@@ -4424,7 +6868,529 @@ function Kiosk132({
     }, "lignes reconnues â vÃ©rifie Ã  l Åil contre la page OSE"), /*#__PURE__*/React.createElement("span", {
       className: "ml-auto text-[10px] rounded px-1.5 py-0.5 border " + (oseRes108.complete.full ? "text-emerald-300 border-emerald-400/40" : "text-amber-300 border-amber-400/40"),
       title: "Marqueur dÃ©but de tableau : " + (oseRes108.complete.debut ? "dÃ©tectÃ©" : "ABSENT") + " Â· marqueur fin (totaux officiels) : " + (oseRes108.complete.fin ? "dÃ©tectÃ©" : "ABSENT")
-    }, oseRes108.complete.full ? "sÃ©lection complÃ¨te" : "sÃ©lection probablement incomplÃ¨te")), !oseRes108.complete.full && /*#__PURE__*/React.createElement©, aide au remplissage) â SUITE 137 : depuis l ARCHIVE importÃ©e
+    }, oseRes108.complete.full ? "sÃ©lection complÃ¨te" : "sÃ©lection probablement incomplÃ¨te")), !oseRes108.complete.full && /*#__PURE__*/React.createElement("p", {
+      className: "text-[10px] text-amber-300 mt-0.5"
+    }, "â  DÃ©but et/ou fin du tableau non dÃ©tectÃ©s : recopie TOUTE la page (Ctrl+A Ctrl+C)."), /*#__PURE__*/React.createElement("div", {
+      className: "text-[10px] text-slate-400 mt-0.5 tabular-nums"
+    }, oseRes108.type === "ens" ? /*#__PURE__*/React.createElement(React.Fragment, null, "recalcul : CM ", oseRes108.res.tot.cm, " Â· TD ", oseRes108.res.tot.td, " Â· TP ", oseRes108.res.tot.tp, " = ", oseRes108.res.tot.h, " h Â· Ã©qTD ", Math.round((oseRes108.res.tot.cm * 1.5 + oseRes108.res.tot.td + oseRes108.res.tot.tp) * 100) / 100, " (CM Ã1,5 Â· TD Ã1 Â· TP Ã1)", /*#__PURE__*/React.createElement("br", null), "officiel page : CM ", oseRes108.res.official.cm, " Â· TD ", oseRes108.res.official.td, " Â· TP ", oseRes108.res.official.tp, " Â· service ", oseRes108.res.official.service) : /*#__PURE__*/React.createElement(React.Fragment, null, "recalcul : ", oseRes108.res.tot, " h Â· officiel page : ", oseRes108.res.official.ref, " h", /*#__PURE__*/React.createElement("br", null), "par fonction : ", Object.keys(oseRes108.res.byFn108).map(fn => fn + " " + oseRes108.res.byFn108[fn] + " h" + (oseRes108.res.byFnPl && oseRes108.res.byFnPl[fn] ? " (plafond " + oseRes108.res.byFnPl[fn].plafond + " h" + (oseRes108.res.byFn108[fn] >= oseRes108.res.byFnPl[fn].plafond ? " atteint â" : "") + ")" : "")).join(" Â· "))))) : null;
+    // SUITE 137 : onglet FIGÃ â alimentÃ© par l'ARCHIVE D'ANNÃE importÃ©e (aucune
+    // donnÃ©e embarquÃ©e). Sans archive : bandeau Â« donnÃ©es manquantes Â» + IMPORT
+    // du fichier JSON ; bilan figÃ©-par-OSE (fig108) conservÃ© MASi frise colonnes
+    // de rappel N-1 Â« â Â».
+    if (persoTab === "fig" && !arch137) {
+      const fig108 = persoOseFig;
+      return /*#__PURE__*/React.createElement("div", {
+        className: "fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start sm:items-center justify-center p-2 sm:p-4 z-50",
+        onClick: () => closePerso108()
+      }, /*#__PURE__*/React.createElement("div", {
+        className: "bg-slate-900 border border-slate-700 rounded-2xl p-4 max-w-3xl w-full shadow-2xl max-h-[92vh] overflow-y-auto",
+        onClick: e => e.stopPropagation()
+      }, /*#__PURE__*/React.createElement("div", {
+        className: "flex justify-between items-start mb-2 gap-2"
+      }, /*#__PURE__*/React.createElement("h2", {
+        className: "font-bold text-base"
+      }, "Î£ SynthÃ¨se personnelle Â· ", persoT108), /*#__PURE__*/React.createElement("button", {
+        onClick: () => closePerso108(),
+        title: "Fermer",
+        className: "text-slate-400 hover:text-slate-200 text-lg leading-none px-1"
+      }, "â")), /*#__PURE__*/React.createElement("div", {
+        className: "relative flex flex-wrap items-center gap-2 mb-3"
+      }, " ", /*#__PURE__*/React.createElement("button", {
+        onClick: () => {
+          setPersoTab("fig");
+          setPersoWk(44);
+        },
+        className: "text-[11px] font-medium rounded-lg px-2.5 py-1 border transition " + (persoTab === "fig" ? "bg-indigo-400 text-slate-900 border-indigo-400" : "bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500")
+      }, "2025-2026 Â· figÃ©e"), /*#__PURE__*/React.createElement("button", {
+        onClick: () => {
+          setPersoTab("dyn");
+          setPersoWk(Math.max(0, Math.min(44, Math.round((startOfWeek(new Date()).getTime() - new Date(2026, 7, 24).getTime()) / 6.048e8))));
+        },
+        className: "text-[11px] font-medium rounded-lg px-2.5 py-1 border transition " + (persoTab === "dyn" ? "bg-indigo-400 text-slate-900 border-indigo-400" : "bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500")
+      }, "2026-2027 Â· en direct"), /*#__PURE__*/React.createElement("button", {
+        onClick: () => setPersoOseOpen108(!persoOseOpen108),
+        title: "Importer une page OSE de l annÃ©e figÃ©e (Enseignements rÃ©alisÃ©s ou RÃ©fÃ©rentiel) pour " + persoT108 + " â bilan figÃ© sans archive ADE, persistÃ© sur cet appareil",
+        className: "text-[10px] font-semibold rounded px-1.5 py-1 border transition " + (persoOseOpen108 ? "bg-slate-800 text-slate-100 border-slate-500" : "bg-slate-900 text-slate-400 border-slate-700 hover:border-slate-500 hover:text-slate-200")
+      }, "OSE â¸"), osePanel108, /*#__PURE__*/React.createElement("button", {
+        onClick: () => setPersoWk(Math.max(0, Math.min(44, Math.round((startOfWeek(new Date()).getTime() - new Date(2026, 7, 24).getTime()) / 6.048e8)))),
+        disabled: true,
+        title: "Sans objet en onglet figÃ© (pas de frise)",
+        className: "text-[10.5px] font-medium bg-slate-900 text-slate-600 border border-slate-800 rounded-lg px-2 py-1 cursor-not-allowed"
+      }, "Auj."), /*#__PURE__*/React.createElement("span", {
+        className: "flex items-center gap-1 text-[10.5px] text-slate-400"
+      }, /*#__PURE__*/React.createElement("button", {
+        onClick: () => setPersoRefOpen(!persoRefOpen),
+        disabled: true,
+        title: "Lignes OSE du rÃ©fÃ©rentiel non disponibles pour une annÃ©e sans donnÃ©es â utilise l import OSE",
+        className: "bg-slate-900 text-slate-600 border border-slate-800 rounded px-1 py-0 cursor-not-allowed font-semibold"
+      }, "RÃ©fÃ©rentiel â¸"), /*#__PURE__*/React.createElement("input", {
+        type: "number",
+        min: "0",
+        step: "1",
+        value: persoRef === null ? "" : persoRef,
+        onChange: ev => {
+          const n = Number(ev.target.value);
+          if (ev.target.value !== "" && isFinite(n) && n >= 0) {
+            setPersoRef(n);
+            store(persoKeyOf(persoT108, "ref"), n);
+          } else if (ev.target.value === "") {
+            setPersoRef(null);
+            store(persoKeyOf(persoT108, "ref"), "null");
+          }
+        },
+        title: "Heures de rÃ©fÃ©rentiel 2025-2026 si tu les connais (optionnel) â saisie Ã  la main, persistÃ©e sur cet appareil pour cet enseignant",
+        className: "w-16 bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-slate-100"
+      }), "h Ã©qTD"), /*#__PURE__*/React.createElement("span", {
+        className: "flex items-center gap-1 text-[10.5px] text-slate-400"
+      }, "Service :", /*#__PURE__*/React.createElement("select", {
+        value: persoSvcCustom ? "autre" : String(persoService),
+        onChange: ev => {
+          const v = ev.target.value;
+          if (v === "384" || v === "192") {
+            const n = Number(v);
+            setPersoService(n);
+            setPersoSvcCustom(false);
+            store(persoKeyOf(persoT108, "service"), n);
+          } else if (v === "autre") setPersoSvcCustom(true);
+        },
+        title: "Service statutaire en Ã©qTD (384 par dÃ©faut, 192 pour un demi-poste, ou libre) â la rÃ¨gle des heures complÃ©mentaires reste identique",
+        className: "bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-slate-100"
+      }, /*#__PURE__*/React.createElement("option", {
+        value: "384"
+      }, "384 h"), /*#__PURE__*/React.createElement("option", {
+        value: "192"
+      }, "192 h"), /*#__PURE__*/React.createElement("option", {
+        value: "autre"
+      }, "Autreâ¦")), persoSvcCustom && /*#__PURE__*/React.createElement("input", {
+        type: "number",
+        min: "1",
+        step: "1",
+        value: persoService,
+        onChange: ev => {
+          const n = Number(ev.target.value);
+          if (isFinite(n) && n >= 1) {
+            setPersoService(n);
+            store(persoKeyOf(persoT108, "service"), n);
+          }
+        },
+        title: "Service statutaire libre (h Ã©qTD)",
+        className: "w-16 bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-slate-100"
+      }))), !arch137 && /*#__PURE__*/React.createElement("div", {
+        className: "border border-amber-400/40 bg-amber-400/10 rounded-xl p-3"
+      }, /*#__PURE__*/React.createElement("p", {
+        className: "text-[12px] font-semibold text-amber-300 mb-1"
+      }, "â  DonnÃ©es 2025-2026 manquantes pour ", persoT108), /*#__PURE__*/React.createElement("p", {
+        className: "text-[11px] text-slate-300 leading-relaxed"
+      }, "Aucune donnÃ©e 2025-2026 importÃ©e pour cet enseignant. Importe ton ARCHIVE D'ANNÃE (fichier JSON exportÃ© de l application, ex. ", /*#__PURE__*/React.createElement("code", {
+        className: "text-slate-400"
+      }, "edt-mp-archive-2025-2026.json"), ") ci-dessous : l onglet restaurera ensuite la frise hebdomadaire, E, le payÃ© estimÃ© et les lignes du rÃ©fÃ©rentiel, Ã  l identique de l annÃ©e figÃ©e."), /*#__PURE__*/React.createElement("div", {
+        className: "mt-2 flex flex-col gap-1.5"
+      }, /*#__PURE__*/React.createElement("div", {
+        className: "flex flex-wrap items-center gap-2"
+      }, /*#__PURE__*/React.createElement("label", {
+        className: "text-[10.5px] font-semibold rounded px-2 py-1 border bg-slate-900 text-slate-200 border-slate-600 hover:border-slate-400 cursor-pointer"
+      }, "ð Choisir le fichier JSON", /*#__PURE__*/React.createElement("input", {
+        type: "file",
+        accept: ".json,application/json",
+        className: "hidden",
+        onChange: ev => {
+          const f = ev.target.files && ev.target.files[0];
+          if (!f) return;
+          const r = new FileReader();
+          r.onload = () => {
+            setArchBuf137(String(r.result || ""));
+            setArchMsg137(null);
+            archUse137(String(r.result || ""));
+          };
+          r.readAsText(f);
+          ev.target.value = "";
+        }
+      })), /*#__PURE__*/React.createElement("span", {
+        className: "text-[10px] text-slate-500"
+      }, "â¦ ou colle son contenu ici :")), /*#__PURE__*/React.createElement("textarea", {
+        value: archBuf137,
+        onChange: ev => {
+          setArchBuf137(ev.target.value);
+          setArchMsg137(null);
+        },
+        placeholder: "{\"annee\":\"2025-2026\",\"weeks\":{â¦}}",
+        className: "w-full h-20 text-[10px] font-mono bg-slate-800 border border-slate-700 rounded px-2 py-1 text-slate-100"
+      }), /*#__PURE__*/React.createElement("div", {
+        className: "flex flex-wrap items-center gap-2"
+      }, /*#__PURE__*/React.createElement("button", {
+        onClick: () => archUse137(archBuf137),
+        disabled: !archBuf137.trim(),
+        className: "text-[11px] font-semibold rounded px-2.5 py-1 bg-indigo-400 text-slate-900 disabled:opacity-40 enabled:hover:bg-indigo-300"
+      }, "Importer cette archive")), archMsg137 && /*#__PURE__*/React.createElement("p", {
+        className: "text-[10.5px] rounded px-2 py-1 " + (archMsg137.ok ? "text-emerald-300 bg-emerald-400/10 border border-emerald-400/40" : "text-rose-300 bg-rose-400/10 border border-rose-400/40")
+      }, archMsg137.ok ? "â " : "â ", archMsg137.txt), fig108 ? /*#__PURE__*/React.createElement("p", {
+        className: "text-[10px] text-slate-500 mt-1"
+      }, "Note : le bilan figÃ©-par-OSE ci-dessous devient inutile une fois l archive importÃ©e, mais il reste affichÃ© tant qu il n est pas retirÃ©.") : null)), fig108 && /*#__PURE__*/React.createElement("div", {
+        className: "border border-slate-600 bg-slate-800/40 rounded-xl p-3"
+      }, /*#__PURE__*/React.createElement("p", {
+        className: "text-[10px] uppercase tracking-wide text-slate-400 font-semibold mb-1"
+      }, "Bilan figÃ©-par-OSE 2025-2026 ", /*#__PURE__*/React.createElement("span", {
+        className: "text-slate-500 normal-case"
+      }, "(collÃ© le ", new Date(fig108.stamp).toLocaleDateString("fr-FR"), " â pas d archive ADE, pas de frise)")), fig108.type === "ens" ? (() => {
+        const tot108 = (fig108.rows || []).reduce((a, r) => ({
+          cm: a.cm + (r.cm || 0),
+          td: a.td + (r.td || 0),
+          tp: a.tp + (r.tp || 0)
+        }), {
+          cm: 0,
+          td: 0,
+          tp: 0
+        });
+        const eq108 = Math.round((tot108.cm * 1.5 + tot108.td + tot108.tp) * 100) / 100;
+        return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+          className: "grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2"
+        }, /*#__PURE__*/React.createElement("div", {
+          className: "bg-slate-800/60 border border-slate-700 rounded-xl px-2.5 py-1.5"
+        }, /*#__PURE__*/React.createElement("p", {
+          className: "text-[9.5px] uppercase tracking-wide text-slate-400 font-semibold"
+        }, "Heures"), /*#__PURE__*/React.createElement("p", {
+          className: "text-sm font-bold text-slate-100"
+        }, Math.round((tot108.cm + tot108.td + tot108.tp) * 100) / 100, " h"), /*#__PURE__*/React.createElement("p", {
+          className: "text-[10px] text-slate-400"
+        }, "CM ", tot108.cm, " Â· TD ", tot108.td, " Â· TP ", tot108.tp)), /*#__PURE__*/React.createElement("div", {
+          className: "bg-slate-800/60 border border-slate-700 rounded-xl px-2.5 py-1.5"
+        }, /*#__PURE__*/React.createElement("p", {
+          className: "text-[9.5px] uppercase tracking-wide text-slate-400 font-semibold"
+        }, "ÃqTD (OSE)"), /*#__PURE__*/React.createElement("p", {
+          className: "text-sm font-bold text-slate-100"
+        }, eq108), /*#__PURE__*/React.createElement("p", {
+          className: "text-[10px] text-slate-400"
+        }, "CM Ã1,5 Â· TD Ã1 Â· TP Ã1")), /*#__PURE__*/React.createElement("div", {
+          className: "bg-slate-800/60 border border-slate-700 rounded-xl px-2.5 py-1.5"
+        }, /*#__PURE__*/React.createElement("p", {
+          className: "text-[9.5px] uppercase tracking-wide text-slate-400 font-semibold"
+        }, "RÃ©fÃ©rentiel 25-26"), /*#__PURE__*/React.createElement("p", {
+          className: "text-sm font-bold text-slate-100"
+        }, typeof persoRef === "number" ? persoRef + " h" : "â"), /*#__PURE__*/React.createElement("p", {
+          className: "text-[10px] text-slate-400"
+        }, typeof persoRef === "number" ? "saisi Ã  la main" : "non fourni")), /*#__PURE__*/React.createElement("div", {
+          className: "bg-slate-800/60 border border-slate-700 rounded-xl px-2.5 py-1.5"
+        }, /*#__PURE__*/React.createElement("p", {
+          className: "text-[9.5px] uppercase tracking-wide text-slate-400 font-semibold"
+        }, "Frise hebdomadaire"), /*#__PURE__*/React.createElement("p", {
+          className: "text-sm font-bold text-slate-400"
+        }, "â"), /*#__PURE__*/React.createElement("p", {
+          className: "text-[10px] text-slate-500"
+        }, "impossible sans archive ADE"))), /*#__PURE__*/React.createElement("div", {
+          className: "flex flex-col gap-0.5"
+        }, (fig108.rows || []).slice(0, 40).map((r, i) => /*#__PURE__*/React.createElement("p", {
+          key: i,
+          className: "text-[10.5px] text-slate-300 flex justify-between gap-2"
+        }, /*#__PURE__*/React.createElement("span", {
+          className: "truncate",
+          title: (r.formation ? r.formation + " Â· " : "") + (r.lib || "")
+        }, (r.formation ? r.formation + " Â· " : "") + (r.lib || "")), /*#__PURE__*/React.createElement("span", {
+          className: "tabular-nums whitespace-nowrap"
+        }, r.cm || 0, "/", r.td || 0, "/", r.tp || 0)))), (fig108.rows || []).length > 40 ? /*#__PURE__*/React.createElement("p", {
+          className: "text-[10px] text-slate-500 mt-0.5"
+        }, "â¦ ", fig108.rows.length - 40, " autres lignes") : null);
+      })() : (() => /*#__PURE__*/React.createElement("div", {
+        className: "flex flex-col gap-0.5"
+      }, (fig108.rows || []).map((r, i) => /*#__PURE__*/React.createElement("p", {
+        key: i,
+        className: "text-[10.5px] text-slate-300 flex justify-between gap-2"
+      }, /*#__PURE__*/React.createElement("span", {
+        className: "truncate",
+        title: r.fonction + (r.commentaires ? " â " + r.commentaires : "")
+      }, r.fonction, r.commentaires ? /*#__PURE__*/React.createElement("span", {
+        className: "text-slate-500"
+      }, " â ", r.commentaires) : null), /*#__PURE__*/React.createElement("span", {
+        className: "tabular-nums"
+      }, r.h, " h"))), /*#__PURE__*/React.createElement("p", {
+        className: "text-[10px] text-slate-400 mt-1 text-right tabular-nums"
+      }, "Total : ", /*#__PURE__*/React.createElement("b", {
+        className: "text-slate-200"
+      }, fig108.tot, " h"))))(), /*#__PURE__*/React.createElement("button", {
+        onClick: () => {
+          setPersoOseFig(null);
+          store(persoKeyOf(persoT108, "ose-fig"), "null");
+        },
+        title: "Retirer ce bilan figÃ© OSE (colle une autre page pour le remplacer)",
+        className: "mt-2 text-[10px] font-medium bg-slate-900 text-rose-300 border border-rose-400/40 hover:border-rose-300 rounded px-1.5 py-0.5"
+      }, "â Retirer ce bilan OSE figÃ©"))));
+    }
+    const Y = persoTab === "fig" ? BilanEngine.buildYear({
+      start: [2025, 7, 25],
+      nw: 45,
+      weeks: arch137.weeks,
+      refTotal: typeof persoRef === "number" ? persoRef : archRefTotal137(arch137) || 0,
+      service: persoService
+    }) : BilanEngine.buildYear({
+      start: [2026, 7, 24],
+      nw: 45,
+      weeks: BilanEngine.aggregate(persoTagged(mpOnly ? liveEvs94.filter(e => evInMpMask(e, mpMask)) : liveEvs94), persoClassif),
+      refTotal: refEff112,
+      service: persoService
+    }); // SUITE 99â112 : annÃ©e en cours = lignes OSE, sinon valeur approchÃ©e, sinon 0
+    const wi = Math.max(0, Math.min(Y.NW - 1, persoWk));
+    const snap = Y.oseAt(wi);
+    const full = Y.oseAt(Y.NW - 1);
+    const c = Y.CUM[wi];
+    const satW = Y.satWeekAt(),
+      satC = Y.satCoursAt();
+    // SUITE 95 : horizon du graphe - plein jusqu'a la semaine du jour, pointille jusqu'au
+    // DERNIER COURS paye (cm/td/tp) du flux de reference, AUCUN trace au-dela (plus de
+    // plateau jusqu'a fin juin sur un agenda non saisi). Onglet fige 25-26 : plein integre.
+    const baseW95 = persoTab === "fig" ? new Date(2025, 7, 25) : new Date(2026, 7, 24);
+    const jNow95 = persoTab === "fig" ? Y.NW - 1 : Math.max(0, Math.min(Y.NW - 1, Math.round((startOfWeek(new Date()).getTime() - baseW95.getTime()) / 6.048e8)));
+    let lastC95 = 0;
+    if (persoTab !== "fig") for (const e of mpOnly ? liveEvs94.filter(e2 => evInMpMask(e2, mpMask)) : liveEvs94) {
+      if (persoTypeOf(e) === "exclu") continue;
+      const tt = (e.start instanceof Date ? e.start : decDT(e.start)).getTime();
+      if (tt > lastC95) lastC95 = tt;
+    }
+    const jHor95 = persoTab === "fig" || !lastC95 ? Y.NW - 1 : Math.max(0, Math.min(Y.NW - 1, Math.round((startOfWeek(new Date(lastC95)).getTime() - baseW95.getTime()) / 6.048e8)));
+    const jEnd95 = Math.min(jNow95, jHor95); // fin du trace PLEIN (pointille ensuite jusq'a jHor95)
+    const wLbl = i => Y.WEEKS[i].date.toLocaleDateString("fr-FR", {
+      day: "numeric",
+      month: "short"
+    });
+    const wBar = i => "semaine du " + Y.WEEKS[i].date.toLocaleDateString("fr-FR") + " : " + fmtHrs(Y.WEEKS[i].tot) + (Y.WEEKS[i].tot ? " (CM " + fmtHrs(Y.WEEKS[i].cm) + " Â· TD " + fmtHrs(Y.WEEKS[i].td) + " Â· TP " + fmtHrs(Y.WEEKS[i].tp) + ")" : " (aucun crÃ©neau)") + " â clic = analyser ici";
+    const promoTot = {};
+    for (const w of Y.WEEKS) for (const p of Object.keys(w.byPromo)) promoTot[p] = Math.round(((promoTot[p] || 0) + w.byPromo[p]) * 100) / 100;
+    const promos = Object.keys(promoTot).sort((a, b) => promoTot[b] - promoTot[a]);
+    const big = Y.WEEKS.slice().sort((a, b) => b.tot - a.tot).slice(0, 3).sort((a, b) => a.i - b.i);
+    // Suite 93 : graphe de cumul (4 courbes) â gÃ©omÃ©trie et sÃ©ries
+    const CH_W = 900,
+      CH_H = 170,
+      PL = 40,
+      PR = 10,
+      PT = 10,
+      PB = 18;
+    const chartMax = Math.max(...Y.CUM.map((c, j) => Y.oseAt(j).paid), persoService);
+    // SUITE 105 : onglet Â« Promos Â» â effectuÃ© 26-27 PAR PROMO Ã  CE JOUR (heures rÃ©elles,
+    // mÃªmes exclusions que la SynthÃ¨se : persoTypeOf exclu + filtre MP explicite du toggle).
+    const now105 = Date.now();
+    const done105 = {};
+    for (const e of mpOnly ? liveEvs94.filter(ev => evInMpMask(ev, mpMask)) : liveEvs94) {
+      const tt105 = persoTypeOf(e);
+      if (tt105 === "exclu") continue;
+      const st105 = e.start instanceof Date ? e.start : decDT(e.start);
+      if (st105.getTime() > now105) continue;
+      const en105 = e.end instanceof Date ? e.end : decDT(e.end);
+      const pr105 = persoPromoOf105(e); // SUITE 105c : rÃ©solution centralisÃ©e (105b Ã©tait incomplÃ¨te : le flux peut envoyer Â« CiTiSE2-IUTD Â» sans prÃ©fixe Etud-)
+      const d105 = done105[pr105] || (done105[pr105] = {
+        cm: 0,
+        td: 0,
+        tp: 0
+      });
+      d105[tt105 === "cm" ? "cm" : tt105 === "td" ? "td" : "tp"] += (en105 - st105) / 3.6e6;
+    }
+    const doneTot105 = pr => {
+      const d = done105[pr] || {
+        cm: 0,
+        td: 0,
+        tp: 0
+      };
+      return Math.round((d.cm + d.td + d.tp) * 100) / 100;
+    };
+    const prevTot105 = pr => (arch137 && arch137.rapprochementOSE ? arch137.rapprochementOSE[pr] || [] : []).reduce((a, it) => a + (it.h || 0), 0); // SUITE 137 : rapprochement OSE de l ARCHIVE importÃ©e
+    const pct105 = (eff, prev) => prev > 0 ? Math.round(eff / prev * 1000) / 10 : null;
+    const ymax = Math.max(200, Math.ceil(chartMax * 1.08 / 100) * 100);
+    const cx = j => PL + j / 44 * (CH_W - PL - PR);
+    const cy = v => CH_H - PB - Math.min(v, ymax) / ymax * (CH_H - PT - PB);
+    const vAt = j => {
+      const o = Y.oseAt(j);
+      return {
+        brut: Y.CUM[j].tot,
+        brutRef: Y.CUM[j].tot + o.ref,
+        payeCours: o.paidCours,
+        paye: o.paid
+      };
+    };
+    const SER93 = [{
+      key: "brut",
+      name: "Cours (h rÃ©elles)",
+      color: "#94a3b8",
+      dash: "none"
+    }, {
+      key: "brutRef",
+      name: "Cours + rÃ©fÃ©rentiel (h rÃ©elles)",
+      color: "#38bdf8",
+      dash: "4 3"
+    }, {
+      key: "payeCours",
+      name: "PayÃ© Ã©qTD cours (prorata)",
+      color: "#818cf8",
+      dash: "none"
+    }, {
+      key: "paye",
+      name: "PayÃ© Ã©qTD total",
+      color: "#34d399",
+      dash: "none"
+    }];
+    const SERv108 = SER93; // SUITE 112 : TOUTES les courbes tracÃ©es, rÃ©fÃ©rentiel Ã  0 y compris (plus de courbe solitaire heures rÃ©elles)
+    const card = (t, v, sub, cls) => /*#__PURE__*/React.createElement("div", {
+      className: "bg-slate-800/60 border border-slate-700 rounded-xl px-2.5 py-1.5 min-w-0 " + (cls || "")
+    }, /*#__PURE__*/React.createElement("p", {
+      className: "text-[9.5px] uppercase tracking-wide text-slate-400 font-semibold leading-tight"
+    }, t), /*#__PURE__*/React.createElement("p", {
+      className: "text-sm font-bold text-slate-100 leading-snug"
+    }, v), sub ? /*#__PURE__*/React.createElement("p", {
+      className: "text-[10px] text-slate-400 leading-tight"
+    }, sub) : null);
+    const prevT113 = persoOseEns && persoTab === "dyn" ? (persoOseEns.rows || []).reduce((a, r) => ({
+      cm: a.cm + (r.cm || 0),
+      td: a.td + (r.td || 0),
+      tp: a.tp + (r.tp || 0)
+    }), {
+      cm: 0,
+      td: 0,
+      tp: 0
+    }) : null; // SUITE 113 : total Ã©qTD du prÃ©visionnel OSE enseignement COLLÃ (rÃ©fÃ©rence validÃ©e) pour l annotation Â« prev OSE Â» du Total fin d'annÃ©e â rien si jamais collÃ© ou onglet figÃ©
+    const prevOse113 = prevT113 ? Math.round((prevT113.cm * 1.5 + prevT113.td + prevT113.tp) * 100) / 100 : null;
+    return /*#__PURE__*/React.createElement("div", {
+      className: "fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start sm:items-center justify-center p-2 sm:p-4 z-50",
+      onClick: () => closePerso108()
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "bg-slate-900 border border-slate-700 rounded-2xl p-4 max-w-3xl w-full shadow-2xl max-h-[92vh] overflow-y-auto",
+      onClick: e => e.stopPropagation()
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "flex justify-between items-start mb-2 gap-2"
+    }, /*#__PURE__*/React.createElement("h2", {
+      className: "font-bold text-base"
+    }, "Î£ SynthÃ¨se personnelle Â· ", persoT108), " ", /*#__PURE__*/React.createElement("button", {
+      onClick: () => closePerso108(),
+      title: "Fermer",
+      className: "text-slate-400 hover:text-slate-200 text-lg leading-none px-1"
+    }, "â")), archMsg137 && /*#__PURE__*/React.createElement("p", {
+      className: "mb-2 text-[10.5px] rounded px-2 py-1 " + (archMsg137.ok ? "text-emerald-300 bg-emerald-400/10 border border-emerald-400/40" : "text-rose-300 bg-rose-400/10 border border-rose-400/40")
+    }, archMsg137.ok ? "â " : "â ", archMsg137.txt), " ", /*#__PURE__*/React.createElement("div", {
+      className: "relative flex flex-wrap items-center gap-2 mb-2"
+    }, " ", /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        setPersoTab("fig");
+        setPersoWk(44);
+      },
+      className: "text-[11px] font-medium rounded-lg px-2.5 py-1 border transition " + (persoTab === "fig" ? "bg-indigo-400 text-slate-900 border-indigo-400" : "bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500")
+    }, "2025-2026 Â· figÃ©e"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        setPersoTab("dyn");
+        setPersoWk(Math.max(0, Math.min(44, Math.round((startOfWeek(new Date()).getTime() - new Date(2026, 7, 24).getTime()) / 6.048e8))));
+      },
+      className: "text-[11px] font-medium rounded-lg px-2.5 py-1 border transition " + (persoTab === "dyn" ? "bg-indigo-400 text-slate-900 border-indigo-400" : "bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500")
+    }, "2026-2027 Â· en direct"), arch137 && arch137.rapprochementOSE && /*#__PURE__*/React.createElement("button", {
+      onClick: () => setPersoTab("promo"),
+      title: "Comparaison par promotion : prÃ©visionnel 25-26 (service fait, rapprochement OSE soldÃ©) vs effectuÃ© 26-27 Ã  ce jour â % validÃ©, dÃ©tail par Ã©tiquette OSE au clic",
+      className: "text-[11px] font-medium rounded-lg px-2.5 py-1 border transition " + (persoTab === "promo" ? "bg-indigo-400 text-slate-900 border-indigo-400" : "bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-500")
+    }, "Promos"), " ", /*#__PURE__*/React.createElement("button", {
+      onClick: () => setPersoWk(Math.max(0, Math.min(44, Math.round((startOfWeek(new Date()).getTime() - new Date(2026, 7, 24).getTime()) / 6.048e8)))),
+      title: "Replacer le curseur sur la semaine en cours",
+      className: "text-[10.5px] font-medium bg-slate-900 text-amber-300 border border-amber-400/40 hover:border-amber-300 rounded-lg px-2 py-1"
+    }, "Auj."), persoTab === "fig" && arch137 && /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        store(archKeyOf(persoT108), null);
+        setPersoRef(null);
+        setPersoRefLines([]);
+        setArchMsg137({
+          ok: true,
+          txt: "Archive retirÃ©e â l onglet Â« 2025-2026 Â· figÃ©e Â» est vide jusqu Ã  un nouvel import."
+        });
+      },
+      title: "Retirer l archive 2025-2026 importÃ©e (les donnÃ©es 26-27 et le reste de l app ne sont pas touchÃ©es)",
+      className: "text-[10px] font-medium bg-slate-900 text-rose-300 border border-rose-400/40 hover:border-rose-300 rounded-lg px-2 py-1"
+    }, "â Archive 25-26"), " ", persoTab !== "fig" &&
+    /*#__PURE__*/
+    // SUITE 108 : import OSE (2 pages derriÃ¨re le CAS) â parseur auto-contrÃ´lÃ© + garde-fous de complÃ©tude ; un collÃ© ÃCHEC ne devient jamais rÃ©fÃ©rence
+    React.createElement("button", {
+      onClick: () => {
+        setPersoOseOpen108(!persoOseOpen108);
+        setPersoRefOpen(false);
+      },
+      title: "Coller une page OSE (Enseignements prÃ©visionnels â prÃ©visionnel de l annÃ©e ; RÃ©fÃ©rentiel prÃ©visionnel â lignes du rÃ©fÃ©rentiel) pour " + persoT108 + " â ne sÃ©lectionne rien, copie TOUTE la page (Ctrl+A Ctrl+C) ; auto-contrÃ´le vs totaux officiels de la page",
+      className: "text-[10px] font-semibold rounded px-1.5 py-1 border transition " + (persoOseOpen108 ? "bg-slate-800 text-slate-100 border-slate-500" : "bg-slate-900 text-slate-400 border-slate-700 hover:border-slate-500 hover:text-slate-200")
+    }, "OSE â¸"), osePanel108, /*#__PURE__*/React.createElement("span", {
+      className: "flex items-center gap-1 text-[10.5px] text-slate-400"
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => setPersoRefOpen(!persoRefOpen),
+      title: persoTab === "fig" ? "DÃ©tail des lignes OSE du rÃ©fÃ©rentiel 25-26 (validÃ© paye, lecture seule) â s affiche par-dessus l histogramme" : "DÃ©tail des lignes OSE du rÃ©fÃ©rentiel de l annÃ©e en cours â libellÃ©s et heures Ã©ditables, ou importÃ©es depuis la page OSE (bouton OSE â¸), recalcul immÃ©diat, persistÃ© sur cet appareil â s affiche par-dessus l histogramme",
+      className: "font-semibold rounded px-1 py-0.5 border transition " + (persoRefOpen ? "bg-slate-800 text-slate-100 border-slate-500" : "bg-slate-900 text-slate-400 border-slate-700 hover:border-slate-500 hover:text-slate-200")
+    }, persoRefOpen ? "RÃ©fÃ©rentiel â¾" : "RÃ©fÃ©rentiel â¸"), persoTab === "fig" ? /*#__PURE__*/React.createElement("input", {
+      type: "number",
+      min: "0",
+      step: "1",
+      value: persoRef,
+      onChange: ev => {
+        const n = Number(ev.target.value);
+        if (isFinite(n) && n >= 0) {
+          setPersoRef(n);
+          store(persoKeyOf(persoT108, "ref"), n);
+        }
+      },
+      title: "Heures de rÃ©fÃ©rentiel 25-26 figÃ©es (socle actif dÃ¨s le 1er septembre) â recalcul immÃ©diat, persistÃ© sur cet appareil",
+      className: "w-16 bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-slate-100"
+    }) // SUITE 108 : Ã©criture prÃ©fixÃ©e (repli lecture ancienne clÃ© conservÃ©)
+    : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("b", {
+      className: "text-slate-200 tabular-nums",
+      title: "Total des lignes OSE de l'annÃ©e en cours â Ã©dite-les via le dÃ©pli â¾"
+    }, refDyn99 % 1 ? refDyn99.toFixed(1) : refDyn99), refDyn99 === 0 && /*#__PURE__*/React.createElement("input", {
+      type: "number",
+      min: "0",
+      step: "1",
+      placeholder: "â rÃ©f.",
+      value: persoRefApprox112 > 0 ? persoRefApprox112 : "",
+      onChange: ev => {
+        const n = Number(ev.target.value);
+        const okx112 = ev.target.value !== "" && isFinite(n) && n >= 0;
+        setPersoRefApprox112(okx112 ? n : 0);
+        store(persoKeyOf(persoT108, "refapprox"), okx112 ? n : "null");
+      },
+      title: "SUITE 112 : valeur APPROCHÃE du rÃ©fÃ©rentiel (h Ã©qTD), utilisÃ©e tant qu'aucune ligne OSE n'est saisie â les lignes (RÃ©fÃ©rentiel â¾) et l'import OSE prennent la prioritÃ© ; recalcul immÃ©diat, persistÃ©e sur cet appareil pour cet enseignant",
+      className: "w-16 bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-slate-100"
+    }), arch137 && (() => {
+      // SUITE 99b : rappel du rÃ©fÃ©rentiel 25-26 Ã  cÃ´tÃ© du total Ã©ditable (aide au remplissage + Ã©cart visible) â SUITE 137 : depuis l ARCHIVE importÃ©e
+      const d = refDyn99 - persoRef;
+      return /*#__PURE__*/React.createElement("span", {
+        className: "text-slate-500 tabular-nums",
+        title: "RÃ©fÃ©rentiel 2025-2026 (figÃ©, validÃ© paye) : " + persoRef + " h Ã©qTD â l'Ã©cart avec ton total en cours est indiquÃ©"
+      }, "(25-26\xA0: ", persoRef, "\xA0h", d ? " Â· " + (d > 0 ? "+" : "") + (d % 1 ? d.toFixed(1) : d) : "", ")");
+    })()), "h Ã©qTD", (() => {
+      // SUITE 99 : dÃ©pli des lignes OSE du rÃ©fÃ©rentiel (fig = lecture seule, dyn = Ã©ditable)
+      const lines = persoTab === "fig" ? arch137.refItems || [] : persoRefLines;
+      const tot99 = lines.reduce((a, l) => a + (l.h || 0), 0);
+      const edit99 = (i, k, v) => {
+        const nl = persoRefLines.map((l, j) => j === i ? {
+          ...l,
+          [k]: v
+        } : l);
+        setPersoRefLines(nl);
+        store(persoKeyOf(persoT108, "ref-lines"), JSON.stringify(nl));
+      }; // SUITE 108 : clÃ© prÃ©fixÃ©e par enseignant
+      return /*#__PURE__*/React.createElement("span", {
+        className: "contents"
+      }, persoRefOpen && /*#__PURE__*/React.createElement("div", {
+        className: "absolute left-0 right-0 top-full mt-1 z-40 bg-slate-900/95 backdrop-blur border border-slate-600 rounded-xl p-2 shadow-2xl"
+      }, " ", /*#__PURE__*/React.createElement("div", {
+        className: "flex items-center justify-between mb-1"
+      }, /*#__PURE__*/React.createElement("p", {
+        className: "text-[10px] uppercase tracking-wide text-slate-400 font-semibold"
+      }, "Lignes OSE du rÃ©fÃ©rentiel", persoTab === "fig" ? " Â· 25-26 figÃ©es (lecture seule)" : " Â· annÃ©e en cours (Ã©ditable)"), persoTab !== "fig" && /*#__PURE__*/React.createElement("button", {
+        onClick: () => {
+          const nl = persoRefLines.concat([{
+            lib: "Nouvelle ligne",
+            h: 0
+          }]);
+          setPersoRefLines(nl);
+          store(persoKeyOf(persoT108, "ref-lines"), JSON.stringify(nl));
+        },
+        title: "Ajouter une ligne OSE",
+        className: "text-[10px] font-medium bg-slate-900 text-emerald-300 border border-emerald-400/40 hover:border-emerald-300 rounded px-1.5 py-0.5"
+      }, "+ ligne"), /*#__PURE__*/React.createElement("button", {
+        onClick: () => setPersoRefOpen(false),
+        title: "Refermer le dÃ©pli",
+        className: "text-slate-500 hover:text-slate-200 text-base leading-none px-1"
+      }, "â"), " "), /*#__PURE__*/React.createElement("div", {
+        className: "flex flex-col gap-0.5"
+      }, lines.map((l, i) => /*#__PURE__*/React.createElement("div", {
+        key: i,
+        className: "flex items-center gap-1.5"
+      }, (() => {
+        // SUITE 104 : rappel 25-26 par ligne (ligne correspondante du rÃ©fÃ©rentiel figÃ©, aide au remplissage) â SUITE 137 : depuis l ARCHIVE importÃ©e
         if (persoTab === "fig" || !arch137) return null;
         const r104 = (arch137.refItems || []).find(r => r.lib === l.lib);
         const dr104 = r104 ? (l.h || 0) - r104.h : null;
@@ -5123,4 +8089,543 @@ function Kiosk132({
     className: "flex items-center gap-2 flex-wrap"
   }, /*#__PURE__*/React.createElement("span", {
     className: "text-[10.5px] text-slate-400"
-  }, "RÃ©glages (flux personnels, favoris, liens modifiÃ©s â) :")
+  }, "RÃ©glages (flux personnels, favoris, liens modifiÃ©s â) :"), /*#__PURE__*/React.createElement("button", {
+    onClick: exportSettings,
+    className: "text-[11px] font-medium bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg px-2 py-1"
+  }, settingsDone === "copied" ? "â copiÃ©" : "â© Exporter"), /*#__PURE__*/React.createElement("button", {
+    onClick: importSettings,
+    disabled: !settingsDraft.trim(),
+    className: "text-[11px] font-medium bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg px-2 py-1 disabled:opacity-40"
+  }, settingsDone === "ok" ? "â importÃ©" : "â§ Importer"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      try {
+        fileIn110 && fileIn110.current && fileIn110.current.click();
+      } catch (e) {}
+    },
+    className: "text-[11px] font-medium bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg px-2 py-1"
+  }, "ð Fichier"), /*#__PURE__*/React.createElement("input", {
+    ref: fileIn110,
+    type: "file",
+    accept: ".json,application/json",
+    onChange: importFile110,
+    className: "hidden"
+  }), settingsDone === "err" && /*#__PURE__*/React.createElement("span", {
+    className: "text-[10px] text-rose-300"
+  }, "JSON invalide ou Ã©criture impossible"), settingsDone === "shown" && /*#__PURE__*/React.createElement("span", {
+    className: "text-[10px] text-amber-300"
+  }, "copie manuelle ci-dessous")), /*#__PURE__*/React.createElement("textarea", {
+    value: settingsDraft,
+    onChange: e => setSettingsDraft(e.target.value),
+    placeholder: "Export : le JSON copiÃ© s'affiche ici si le presse-papier est indisponible Â· Import : collez ici un export de rÃ©glages, puis Â« â§ Importer Â» â ou choisissez un fichier .json via Â« ð Fichier Â»",
+    rows: "2",
+    className: "mt-1.5 w-full bg-slate-950 border border-slate-700 focus:border-indigo-400 outline-none rounded-xl p-2.5 text-[10px] font-mono"
+  }), importPending110 && /*#__PURE__*/React.createElement("div", {
+    className: "mt-1.5 bg-rose-500/10 border border-rose-400/45 rounded-lg p-2"
+  }, /*#__PURE__*/React.createElement("p", {
+    className: "text-[11px] text-rose-300 font-medium"
+  }, "â  Import REMPLAÃANT (", Object.keys(importPending110.keys || {}).length, " clÃ©s, annÃ©e ", importPending110.year || "?", ") â importer remplace TOUTES tes donnÃ©es personnelles de cette application (favoris, flux, saisies Î£, archives). Il n'y a pas de fusion : exporte d'abord si besoin. Continuer ?"), /*#__PURE__*/React.createElement("div", {
+    className: "mt-1.5 flex gap-1.5"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: importConfirm110,
+    className: "text-[11px] font-medium bg-rose-500 hover:bg-rose-400 text-white rounded-lg px-2 py-1"
+  }, "Importer (remplace tout)"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setImportPending110(null),
+    className: "text-[11px] font-medium bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg px-2 py-1"
+  }, "Annuler")))), syncState === "blocked" && /*#__PURE__*/React.createElement("p", {
+    className: "text-[11px] text-amber-300 mt-2"
+  }, "Le relais des flux ADE est injoignable pour le moment. Utilisez l'import fichier ci-dessous en attendant.")), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs text-slate-500 mb-1"
+  }, "Solution de secours : fichier ou contenu ICS"), /*#__PURE__*/React.createElement("label", {
+    className: "block border-2 border-dashed border-slate-600 hover:border-indigo-400 rounded-xl p-4 text-center cursor-pointer transition mb-3"
+  }, /*#__PURE__*/React.createElement("input", {
+    ref: fileRef,
+    type: "file",
+    accept: ".ics,.ical,.txt",
+    className: "hidden",
+    onChange: e => onFile(e.target.files[0])
+  }), /*#__PURE__*/React.createElement("p", {
+    className: "text-sm font-medium text-slate-200"
+  }, "Glissez vos fichiers .ics ici"), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs text-slate-500 mt-0.5"
+  }, "ou cliquez pour parcourir (flux de groupes ou agenda enseignant, reconnu automatiquement)")), /*#__PURE__*/React.createElement("textarea", {
+    value: icsText,
+    onChange: e => setIcsText(e.target.value),
+    placeholder: "â¦ou collez le contenu d'un ou plusieurs fichiers ICS : BEGIN:VCALENDARâ¦",
+    rows: "3",
+    className: "w-full bg-slate-950 border border-slate-700 focus:border-indigo-400 outline-none rounded-xl p-3 text-xs font-mono mb-2"
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: () => icsText.trim() && importIcs(icsText),
+    disabled: !icsText.trim(),
+    className: "w-full text-xs font-medium bg-slate-800 hover:bg-slate-700 disabled:opacity-40 border border-slate-700 transition rounded-lg px-3 py-2 mb-3"
+  }, "Utiliser ce contenu"))), selected && /*#__PURE__*/React.createElement("div", {
+    className: "fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50",
+    onClick: closeDetail
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "bg-slate-900 border border-slate-700 rounded-2xl p-5 max-w-sm w-full shadow-2xl",
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex justify-between items-start mb-3"
+  }, /*#__PURE__*/React.createElement("h2", {
+    className: "font-bold text-base"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => openPlan({}),
+    title: "Planning de la ressource : toutes les sÃ©ances de la promotion, tous les groupes",
+    className: "underline decoration-dotted decoration-indigo-400 underline-offset-2 hover:text-indigo-300"
+  }, selected.summary, " ", /*#__PURE__*/React.createElement("span", {
+    className: "text-[10px] opacity-60"
+  }, "â¾"))), /*#__PURE__*/React.createElement("button", {
+    onClick: closeDetail,
+    className: "text-slate-500 hover:text-slate-200 text-lg leading-none"
+  }, "â")), (() => {
+    const al = alertFor(selected, planPromoOf(selected));
+    return al ? /*#__PURE__*/React.createElement("div", {
+      className: "mb-2 rounded-xl border p-2.5 flex items-center gap-2 " + (al.color === "jaune" ? "border-amber-400/40 bg-amber-500/10" : "border-red-400/40 bg-red-500/10")
+    }, /*#__PURE__*/React.createElement("span", {
+      className: (al.color === "jaune" ? "text-amber-300" : "text-red-400") + " text-base leading-none"
+    }, "â "), /*#__PURE__*/React.createElement("p", {
+      className: "text-xs text-slate-200 flex-1 leading-snug"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "font-semibold"
+    }, fmtH(al.missingH), " manquantes sur les ", fmtH(al.refH), " dues"), " â comptage du groupe : ", fmtH(al.h), " (", al.n, " sÃ©ances) Â· ", al.color === "jaune" ? "annulation non remplacÃ©e" : "sÃ©ances jamais placÃ©es sur ADE"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => openPlan({
+        anchor: serKey(selected, planPromoOf(selected)),
+        hl: true
+      }),
+      title: "Ouvrir le planning de la ressource ancrÃ© sur ce groupe",
+      className: "text-[11px] font-medium bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 whitespace-nowrap"
+    }, "Voir le planning")) : null;
+  })(), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-1.5 text-sm text-slate-300"
+  }, (() => {
+    const o = occFor(selected, selected.slotKind === "promo" || selected.slotKind === "cours" ? selected.promo || selected.slotPromo : null);
+    const al = alertFor(selected, planPromoOf(selected));
+    return o && (o.N > 1 || al) && !noBadgeEv(selected) ? /*#__PURE__*/React.createElement("p", null, /*#__PURE__*/React.createElement("span", {
+      className: "text-slate-500"
+    }, "SÃ©ance :"), " ", /*#__PURE__*/React.createElement("button", {
+      onClick: () => openPlan({
+        anchor: serKey(selected, planPromoOf(selected)),
+        hl: true
+      }),
+      title: "Planning de la ressource ancrÃ© sur ce groupe",
+      className: "px-1 -mx-1 rounded text-slate-100 font-medium underline decoration-dotted decoration-indigo-400 underline-offset-2 hover:bg-slate-800 transition"
+    }, o.n, "/", al ? al.ref : o.N), al ? /*#__PURE__*/React.createElement("span", {
+      className: (al.color === "jaune" ? "text-amber-300" : "text-red-400") + " ml-1",
+      title: "â  " + fmtH(al.missingH) + " non placÃ©es pour ce groupe (" + al.n + " sÃ©ances posÃ©es)"
+    }, "â ") : null, o.next.length ? /*#__PURE__*/React.createElement("span", {
+      className: "text-slate-400"
+    }, " Â· prochaines : ", o.next.map(t => new Date(t).toLocaleDateString("fr-FR", {
+      weekday: "short",
+      day: "numeric",
+      month: "short"
+    })).join(", ")) : null) : null;
+  })(), /*#__PURE__*/React.createElement("p", null, /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-500"
+  }, "Quand :"), " ", new Intl.DateTimeFormat("fr-FR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long"
+  }).format(selected.start), ", ", fmtHM(selected.start), " â ", fmtHM(selected.end)), selected.location && /*#__PURE__*/React.createElement("p", {
+    className: "flex flex-wrap items-center gap-1"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-500 mr-0.5"
+  }, "Salle :"), selected.location.split(",").filter(Boolean).map(r => {
+    const ok = PRELOADED_ROOMS[r] !== undefined || roomIndex[r] !== undefined;
+    const virt = /virtuel/i.test(r);
+    return /*#__PURE__*/React.createElement("span", {
+      key: r,
+      className: "inline-flex items-center"
+    }, /*#__PURE__*/React.createElement("button", {
+      disabled: !ok,
+      onClick: () => setNav({
+        kind: "room",
+        value: r,
+        label: r,
+        ok
+      }),
+      className: ok ? "px-1 rounded underline decoration-dotted hover:text-slate-100 hover:bg-slate-800 transition" : "px-1 rounded text-slate-500 cursor-not-allowed"
+    }, r), virt ? /*#__PURE__*/React.createElement("span", {
+      className: "text-amber-300 text-[10px]",
+      title: "Salle virtuelle"
+    }, "â ") : null);
+  })), (() => {
+    const dgs = dispGroups(selected, selected.slotKind === "promo" ? selected.promo || selected.slotPromo : selected.promo || null, selected.slotKind === "teacher" || selected.slotKind === "room");
+    const alGrp = alertFor(selected, planPromoOf(selected));
+    return dgs.length > 0 ? /*#__PURE__*/React.createElement("p", {
+      className: "flex flex-wrap items-center gap-1"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "text-slate-500 mr-0.5"
+    }, "Groupes :"), dgs.map((g, gi) => {
+      const gv = ETUD_PROMO[g.toUpperCase()] ? g : g.replace(/^(TP|TD|CM)\s+/, "");
+      const mmae = /^(?:MP3?|3A)\s*MAE\s+(.+)$/i.exec(gv);
+      const col = mmae && /^(INI|ALT1?|ALT2)$/i.test(mmae[1]) ? mmae[1] : gv;
+      const p = mmae && /^(INI|ALT1?|ALT2)$/i.test(mmae[1]) ? "MP-3A-MAE" : promoOfGroup(col, selected.slotPromo);
+      const og = noBadgeEv(selected) ? null : occOf(selected, p, "g", g);
+      return /*#__PURE__*/React.createElement("span", {
+        key: gi,
+        className: "inline-flex items-center"
+      }, p ? /*#__PURE__*/React.createElement("button", {
+        onClick: () => setNav({
+          kind: "promo",
+          value: col,
+          promo: p,
+          label: g,
+          ok: true
+        }),
+        className: "px-1 rounded underline decoration-dotted hover:text-slate-100 hover:bg-slate-800 transition"
+      }, g) : /*#__PURE__*/React.createElement("span", {
+        className: "px-0.5"
+      }, g), og && (og.N > 1 || alGrp) ? /*#__PURE__*/React.createElement("button", {
+        onClick: () => openPlan({
+          anchor: gk(g),
+          hl: true
+        }),
+        title: "Planning de la ressource ancrÃ© sur ce groupe",
+        className: "ml-1 text-[8.5px] font-bold text-slate-900 bg-slate-100 hover:bg-white rounded px-0.5"
+      }, og.n, "/", alGrp ? alGrp.ref : og.N) : null);
+    })) : null;
+  })(), (selected.teacher || (selected.co || []).length > 0 || selected.virtEns) && /*#__PURE__*/React.createElement("p", {
+    className: "flex flex-wrap items-center gap-1"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-slate-500 mr-0.5"
+  }, "Enseignant :"), [selected.teacher].concat(selected.co || []).filter(Boolean).map((t, i) => {
+    const ok = teacherIndex[t] !== undefined; // suite 74b : repli sur les flux live (v2 sans base, vacataires absents du RSS)
+    const pSel = selected.slotKind === "promo" || selected.slotKind === "cours" ? selected.promo || selected.slotPromo : null;
+    const solo = i === 0 && !multiTch(selected) && !noBadgeEv(selected); // co-enseignants et Ã©vÃ©nements multi-enseignants : SANS badge
+    const ot = solo ? occOf(selected, pSel, "t") : null;
+    const zk = solo ? occOf(selected, pSel, "k") : null;
+    return /*#__PURE__*/React.createElement("span", {
+      key: i,
+      className: "inline-flex items-center"
+    }, /*#__PURE__*/React.createElement("button", {
+      disabled: !ok,
+      onClick: () => setNav({
+        kind: "teacher",
+        value: t,
+        label: prettyName(t),
+        ok
+      }),
+      className: ok ? "px-1 rounded underline decoration-dotted hover:text-slate-100 hover:bg-slate-800 transition" : "px-1 rounded text-slate-500 cursor-not-allowed"
+    }, prettyName(t)), ot ? /*#__PURE__*/React.createElement("button", {
+      onClick: () => openPlan({
+        anchor: serKey(selected, planPromoOf(selected)),
+        hl: true,
+        focus: t
+      }),
+      title: "Planning de la ressource : sÃ©ances de cet enseignant en surbrillance",
+      className: "ml-1 text-[8.5px] font-bold text-slate-900 bg-slate-100 hover:bg-white rounded px-0.5"
+    }, ot.n, "/", ot.N) : null, zk ? /*#__PURE__*/React.createElement("span", {
+      className: "ml-1 text-slate-400"
+    }, " Â· total : ") : null, zk ? /*#__PURE__*/React.createElement("button", {
+      onClick: () => openPlan({
+        allOpen: true,
+        focus: t
+      }),
+      title: "Planning de la ressource : toutes les sÃ©ances de tous les groupes oÃ¹ cet enseignant intervient",
+      className: "text-[8.5px] font-bold text-slate-900 bg-slate-100 hover:bg-white rounded px-0.5"
+    }, zk.n, "/", zk.N) : null);
+  }), selected.virtEns ? /*#__PURE__*/React.createElement("span", {
+    className: "inline-flex items-center"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "text-sky-300",
+    title: "â  Enseignant virtuel (ressource ADE sans personne)"
+  }, "â "), selected.teacher || (selected.co || []).length ? null : /*#__PURE__*/React.createElement("span", {
+    className: "ml-0.5 text-sky-300/80 italic"
+  }, "virtuel")) : null), selected.description && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setDetailOpen(!detailOpen),
+    title: detailOpen ? "RÃ©duire les dÃ©tails" : "Afficher les dÃ©tails",
+    className: "text-slate-500 hover:text-slate-300 transition"
+  }, detailOpen ? "â¾" : "â¸", " ", /*#__PURE__*/React.createElement("span", {
+    className: "underline decoration-dotted underline-offset-2"
+  }, "DÃ©tails")), detailOpen ? /*#__PURE__*/React.createElement("p", {
+    className: "whitespace-pre-line mt-0.5"
+  }, selected.description) : null)), nav && /*#__PURE__*/React.createElement("div", {
+    className: "mt-3 border border-indigo-400/30 bg-indigo-500/[0.08] rounded-xl p-3"
+  }, /*#__PURE__*/React.createElement("p", {
+    className: "text-[11px] text-slate-300 mb-2"
+  }, "Ouvrir Â« ", nav.label, " Â» :"), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-2 gap-1.5"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => applyNav("replace"),
+    className: "text-[11px] font-medium bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg px-2 py-1.5"
+  }, "Remplacer cet agenda"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => applyNav("below"),
+    disabled: slots.findIndex(s => s.id === selected.slotId) + 1 >= slots.length,
+    className: "text-[11px] font-medium bg-slate-800 hover:bg-slate-700 disabled:opacity-40 border border-slate-600 rounded-lg px-2 py-1.5"
+  }, "Remplacer l'agenda ci-dessous"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => applyNav("insert"),
+    className: "text-[11px] font-medium bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg px-2 py-1.5"
+  }, "InsÃ©rer sous cet agenda"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => applyNav("end"),
+    className: "text-[11px] font-medium bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg px-2 py-1.5"
+  }, "Ajouter Ã  la fin")), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setNav(null),
+    className: "mt-1.5 w-full text-[11px] text-slate-400 hover:text-slate-200 underline underline-offset-2"
+  }, "Annuler")), REPLAN_ENABLED && decDT(selected.start).getTime() >= Date.now() && /*#__PURE__*/React.createElement("button", {
+    onClick: () => runReplan(selected, selected.promo || selected.slotPromo),
+    title: "Trouver oÃ¹ dÃ©placer ce crÃ©neau : fenÃªtres oÃ¹ les groupes, l'enseignant et la salle sont tous libres, au plus prÃ¨s du crÃ©neau d'origine (Â± 3 semaines, jamais dans le passÃ©). IdÃ©al pour un Ã©change avec un collÃ¨gue : copier la proposition et l'envoyer.",
+    className: "w-full mt-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 border border-amber-400/40 text-amber-300 transition rounded-lg px-3 py-2"
+  }, "â Proposer un dÃ©placement"), /*#__PURE__*/React.createElement("button", {
+    onClick: closeDetail,
+    className: "w-full mt-4 text-xs font-medium bg-indigo-500 hover:bg-indigo-400 transition rounded-lg px-3 py-2"
+  }, "Fermer"))), plan && (() => {
+    const ev = plan.ev;
+    const sK = norm(ev.summary);
+    const ty = evTypeOf(ev, plan.promo);
+    // fusion des sÃ©ances du cours : flux promo (prioritaires : salle/enseignant riches) âª flux
+    // enseignants (co-interventions), dÃ©doublonnÃ©es par horodatage au sein de chaque groupe.
+    const secMap = {}; // clÃ© de groupe â { horodatage â Ã©vÃ©nement }
+    const addEv = (e, p) => {
+      const grps = e.groups || [];
+      if (!grps.length || !e.summary || norm(e.summary) !== sK) return;
+      // suite 74 : promo du groupe en prioritÃ© (flux enseignant : la promo du slot est
+      // fausse â coversPromo Ã©chouait â le CMpromo apparaissait 2 fois).
+      const pp = p || promoSrcOf(e) || promoOfGroup(gk(grps[0]) || "") || plan.promo; // SUITE 131
+      // Suite 78 : ÃTANCHÃITÃ des promotions â le planning de la ressource ne montre
+      // QUE la promo du crÃ©neau cliquÃ© (mÃªme titre â  mÃªme cours : Â« Optique Â» en BUT2
+      // n'est pas celui de BUT2 ALT ni de BUT3 TVM). Repli : pas de promo connue â tout.
+      if (plan.promo && pp !== plan.promo) return;
+      if (evTypeOf(e, pp) !== ty) return; // suite 74 : la ressource = cours + TYPE (TD â  CM)
+      const g = serKey(e, pp);
+      if (!g) return;
+      const ts = e.start.getTime();
+      const cur = secMap[g] || (secMap[g] = {});
+      if (!cur[ts] || p) cur[ts] = e;
+    };
+    for (const p of PROMO_KEYS) {
+      if (plan.promo && p !== plan.promo) continue;
+      for (const e of allEvents[p] || []) addEv(e, p);
+    } // suite 78 : promo du crÃ©neau cliquÃ© seulement
+    for (const t of Object.keys(teachers)) for (const e of teachers[t] || []) addEv({
+      ...e,
+      start: decDT(e.start),
+      end: decDT(e.end),
+      groups: typeof e.groups === "string" ? e.groups ? e.groups.split(",") : [] : e.groups || [],
+      teacher: e.teacher && String(e.teacher).trim() || t
+    }, null);
+    const weekOf = d => {
+      const w = new Date(d);
+      w.setHours(0, 0, 0, 0);
+      w.setDate(w.getDate() - (w.getDay() + 6) % 7);
+      return w.getTime();
+    };
+    const sections = Object.keys(secMap).map(g => {
+      const evs = Object.values(secMap[g]).sort((a, b) => a.start - b.start);
+      const tc = {};
+      const th = {}; // suite 78 : heures cumulÃ©es par enseignant dans CE groupe
+      let hh = 0; // suite 78 : heures cumulÃ©es du groupe
+      for (const e of evs) {
+        const dh = (e.end - e.start) / 36e5;
+        hh += dh;
+        for (const t of String(e.teacher || "").split(" / ").map(x => x.trim()).filter(Boolean)) {
+          tc[t] = (tc[t] || 0) + 1;
+          th[t] = (th[t] || 0) + dh;
+        }
+      }
+      const tList = Object.keys(tc).sort((a, b) => tc[b] - tc[a] || a.localeCompare(b));
+      const p = plan.promo || promoSrcOf(evs[0]) || promoOfGroup(g.split("+")[0] || ""); // SUITE 131 : Ã©tiquette d'origine du crÃ©neau avant supposition
+      const al = ty === "TD" || ty === "TP" ? seriesInfo.deficit[(p ? p + "|" : "") + sK + "|" + ty + "|" + g] || null : null;
+      return {
+        g,
+        evs,
+        tc,
+        th,
+        hh,
+        tList,
+        al
+      };
+    }).sort((a, b) => a.g.localeCompare(b.g));
+    const tot = sections.reduce((n, s) => n + s.evs.length, 0);
+    const totH = sections.reduce((n, s) => n + s.hh, 0); // suite 78 : heures totales du cours (promo)
+    const refDay = new Date(ev.start);
+    refDay.setHours(0, 0, 0, 0);
+    const relOf = d => {
+      const a = new Date(d);
+      a.setHours(0, 0, 0, 0);
+      return a < refDay ? "past" : a > refDay ? "fut" : "now";
+    };
+    const selRow = e => String(e.teacher || "").split(" / ").map(x => x.trim()).some(t => planT.includes(t));
+    // lignes d'une section : sÃ©ances rÃ©elles (numÃ©rotÃ©es) + lignes rouges de sÃ©ances non
+    // assurÃ©es (une par semaine oÃ¹ un groupe frÃ¨re a une sÃ©ance mais pas ce groupe ; badge
+    // = celui de la sÃ©ance rÃ©elle SUIVANTE â le retard reste visible en fin de sÃ©rie).
+    const rowsFor = s => {
+      // semaines candidates : un groupe frÃ¨re a une sÃ©ance, pas ce groupe. La date affichÃ©e
+      // Â« ~ Â» est celle du groupe de RÃFÃRENCE (le plus fourni de la sÃ©rie) si possible.
+      const sibW = {};
+      const myW = new Set();
+      const cntTy = o => o.evs.filter(e => evTypeOf(e, plan.promo) === ty).length;
+      const refN = Math.max(...sections.map(o => cntTy(o)), 0);
+      for (const e of s.evs) if (evTypeOf(e, plan.promo) === ty) myW.add(weekOf(e.start));
+      for (const o of sections) {
+        if (o.g === s.g) continue;
+        const prio = cntTy(o) >= refN ? 0 : 1; // dates du groupe de rÃ©fÃ©rence en prioritÃ©
+        for (const e of o.evs) if (evTypeOf(e, plan.promo) === ty) {
+          const w = weekOf(e.start);
+          if (myW.has(w)) continue;
+          if (!sibW[w] || prio < sibW[w].prio || prio === sibW[w].prio && e.start < sibW[w].d) sibW[w] = {
+            d: e.start,
+            prio
+          };
+        }
+      }
+      const reds = s.al ? Object.values(sibW).sort((a, b) => a.d - b.d).slice(0, s.al.redCount).map(x => x.d) : [];
+      const merged = [];
+      let ri = 0,
+        x = 0;
+      for (const e of s.evs) {
+        while (ri < reds.length && reds[ri] < e.start) {
+          merged.push({
+            red: true,
+            d: reds[ri]
+          });
+          ri++;
+        }
+        x++;
+        merged.push({
+          ev: e,
+          x
+        });
+      }
+      while (ri < reds.length) {
+        merged.push({
+          red: true,
+          d: reds[ri]
+        });
+        ri++;
+      }
+      let nxt = null;
+      for (let i = merged.length - 1; i >= 0; i--) {
+        if (merged[i].red) merged[i].x = nxt || x + 1;else nxt = merged[i].x;
+      }
+      return merged;
+    };
+    const rowsBySec = {};
+    sections.forEach(s => {
+      rowsBySec[s.g] = rowsFor(s);
+    });
+    const isOpen = g => planOpen && planOpen[g] !== undefined ? planOpen[g] : planAll !== null ? planAll : plan.allOpen || plan.anchor !== null && plan.anchor !== undefined && (g === plan.anchor || g.split("+").includes(plan.anchor));
+    const anyClosed = sections.some(s => !isOpen(s.g));
+    const fmtDay = d => new Date(d).toLocaleDateString("fr-FR", {
+      weekday: "short",
+      day: "numeric",
+      month: "short"
+    });
+    return /*#__PURE__*/React.createElement("div", {
+      className: "fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-[60]",
+      onClick: closePlan
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "bg-slate-900 border border-indigo-400/40 rounded-2xl max-w-xl w-full max-h-[86vh] flex flex-col shadow-2xl",
+      onClick: e => e.stopPropagation()
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "flex justify-between items-start p-4 pb-2"
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h2", {
+      className: "font-bold text-base"
+    }, typeTitle(ev.summary, ty === "CM" || ty === "TD" || ty === "TP" ? ty : null)), /*#__PURE__*/React.createElement("p", {
+      className: "text-[11px] text-slate-400"
+    }, tot, " sÃ©ance", tot > 1 ? "s" : "", " (", fmtDurH(totH), ") Â· ", sections.length, " groupe", sections.length > 1 ? "s" : "", " Â· promo : ", plan.promo ? PROMOS[plan.promo] && PROMOS[plan.promo].label || plan.promo : "toutes", " Â· crÃ©neau cliquÃ© : ", fmtDay(ev.start), " ", fmtHM(ev.start))), /*#__PURE__*/React.createElement("button", {
+      onClick: closePlan,
+      className: "text-slate-500 hover:text-slate-200 text-lg leading-none"
+    }, "â")), /*#__PURE__*/React.createElement("div", {
+      className: "flex flex-wrap items-center gap-1.5 px-4 pb-2 border-b border-slate-800"
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        setPlanAll(anyClosed);
+        setPlanOpen({});
+      },
+      className: "text-[10px] font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-md px-2 py-1"
+    }, anyClosed ? "Tout dÃ©plier" : "Tout replier"), planT.length > 0 && /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        const nh = !planHide;
+        setPlanHide(nh);
+        if (nh) setPlanAll(true);
+      },
+      className: "text-[10px] font-semibold rounded-md px-2 py-1 border " + (planHide ? "bg-amber-500/20 text-amber-300 border-amber-400" : "bg-slate-800 text-slate-300 border-slate-600 hover:border-amber-400 hover:text-amber-300"),
+      title: planHide ? "RÃ©afficher toutes les sÃ©ances (estompage)" : "Masquer les sÃ©ances des autres enseignants"
+    }, "Seulement ", planT.map(prettyName).join(" + ")), planT.length > 0 && !planHide && /*#__PURE__*/React.createElement("span", {
+      className: "text-[10px] text-slate-500"
+    }, "sÃ©ances de ", planT.map(prettyName).join(" + "), " en surbrillance")), /*#__PURE__*/React.createElement("div", {
+      className: "overflow-y-auto"
+    }, sections.map(s => {
+      const open = isOpen(s.g);
+      const rows = planHide ? rowsBySec[s.g].filter(r => !r.red && selRow(r.ev)) : rowsBySec[s.g];
+      if (planHide && !rows.length) return null;
+      const isAnchor = plan.hl && plan.anchor !== null && plan.anchor !== undefined && (s.g === plan.anchor || s.g.split("+").includes(plan.anchor));
+      return /*#__PURE__*/React.createElement("div", {
+        key: s.g,
+        className: "border-b border-slate-800/60 last:border-b-0 " + (isAnchor ? "bg-indigo-500/[0.07]" : "")
+      }, /*#__PURE__*/React.createElement("div", {
+        className: "flex items-center gap-2 px-4 py-1.5 cursor-pointer select-none hover:bg-slate-800/40",
+        onClick: () => setPlanOpen({
+          ...(planOpen || {}),
+          [s.g]: !open
+        })
+      }, /*#__PURE__*/React.createElement("span", {
+        className: "text-amber-400 text-[10px] w-3 flex-none"
+      }, open ? "â¾" : "â¸"), /*#__PURE__*/React.createElement("span", {
+        className: "text-xs font-bold text-blue-400 whitespace-nowrap"
+      }, s.g), /*#__PURE__*/React.createElement("span", {
+        className: "flex-1 flex flex-wrap gap-x-2 gap-y-0.5 min-w-0 items-center"
+      }, s.tList.map(t => {
+        const sel = planT.includes(t);
+        return /*#__PURE__*/React.createElement("button", {
+          key: t,
+          onClick: ev2 => {
+            ev2.stopPropagation();
+            togglePlanT(t);
+          },
+          title: sel ? "DÃ©sÃ©lectionner cet enseignant" : "SÃ©lectionner cet enseignant (surbrillance de ses sÃ©ances)",
+          className: "text-[10px] px-1 " + (sel ? "rounded bg-amber-500/20 border border-amber-400 text-amber-300" : "rounded border-b border-dotted border-slate-500 text-slate-400 hover:text-amber-300 hover:border-amber-400")
+        }, prettyName(t), " ", /*#__PURE__*/React.createElement("span", {
+          className: "opacity-60"
+        }, "Ã", s.tc[t], " (", fmtDurH(s.th[t]), ")"));
+      })), s.al ? /*#__PURE__*/React.createElement("span", {
+        className: (s.al.color === "jaune" ? "text-amber-400" : "text-red-400") + " text-[9px] font-bold whitespace-nowrap",
+        title: "â  " + fmtH(s.al.missingH) + " non assurÃ©es (" + (s.al.color === "jaune" ? "annulation non remplacÃ©e" : "jamais placÃ©e sur ADE") + ")"
+      }, "â  ", fmtH(s.al.missingH), " non assurÃ©es") : null, /*#__PURE__*/React.createElement("span", {
+        className: "text-[9px] font-bold text-slate-900 bg-slate-100 rounded px-0.5 flex-none"
+      }, s.al ? s.al.n + "/" + s.al.ref : s.evs.length), /*#__PURE__*/React.createElement("span", {
+        className: "text-[9px] text-slate-500 flex-none whitespace-nowrap",
+        title: "Heures cumulÃ©es du groupe pour ce cours (suite 78)"
+      }, fmtDurH(s.hh))), open && rows.map((r, i) => {
+        if (r.red) return /*#__PURE__*/React.createElement("div", {
+          key: "red" + i,
+          className: "flex items-center gap-2 px-4 py-1 text-[11px] border-t border-slate-800/40 text-red-400 bg-red-500/[0.06]"
+        }, /*#__PURE__*/React.createElement("span", {
+          className: "w-[10px] flex-none"
+        }), /*#__PURE__*/React.createElement("span", {
+          className: "text-[9px] font-bold text-slate-900 bg-red-400 rounded px-0.5 flex-none"
+        }, r.x, "/", s.al.ref), /*#__PURE__*/React.createElement("span", {
+          className: "w-[92px] capitalize text-red-400/90 whitespace-nowrap flex-none"
+        }, "~ ", fmtDay(r.d)), /*#__PURE__*/React.createElement("span", {
+          className: "font-semibold italic"
+        }, "sÃ©ance non assurÃ©e â ", s.al.color === "jaune" ? "annulÃ©e, non remplacÃ©e" : "jamais placÃ©e sur ADE"));
+        const e2 = r.ev;
+        const rel = relOf(e2.start);
+        const isClicked = e2.start.getTime() === ev.start.getTime() && e2.id === ev.id;
+        const hl = planT.length > 0 && selRow(e2) && !planHide;
+        const dim = planT.length > 0 && !selRow(e2) && !planHide;
+        const mainT = s.tList[0] || "";
+        const autre = String(e2.teacher || "") !== mainT;
+        return /*#__PURE__*/React.createElement("div", {
+          key: e2.id + "@" + e2.start.getTime(),
+          className: "flex items-center gap-2 px-4 py-1 text-[11px] border-t border-slate-800/40 " + (rel === "now" ? "bg-slate-700/40 " : "") + (isClicked ? "font-bold " : "") + (hl ? "bg-amber-500/10 shadow-[inset_3px_0_0_#f59e0b] " : "") + (dim ? "opacity-15 " : !isClicked && rel === "past" ? "opacity-40 " : "")
+        }, /*#__PURE__*/React.createElement("span", {
+          className: "w-[10px] flex-none text-amber-400"
+        }, isClicked ? "â" : ""), /*#__PURE__*/React.createElement("span", {
+          className: "text-[9px] font-bold text-slate-900 bg-slate-100 rounded px-0.5 flex-none"
+        }, r.x, "/", s.al ? s.al.ref : s.evs.length), /*#__PURE__*/React.createElement("span", {
+          className: "w-[92px] capitalize whitespace-nowrap flex-none"
+        }, fmtDay(e2.start)), /*#__PURE__*/React.createElement("span", {
+          className: "w-[80px] text-slate-400 font-mono whitespace-nowrap flex-none"
+        }, fmtHM(e2.start), "â", fmtHM(e2.end)), /*#__PURE__*/React.createElement("span", {
+          className: "flex-1 min-w-0 truncate text-slate-300"
+        }, e2.location || ""), /*#__PURE__*/React.createElement("span", {
+          className: "whitespace-nowrap flex-none " + (autre ? "italic text-slate-400" : "")
+        }, e2.teacher ? prettyName(e2.teacher) : ""));
+      }));
+    }))));
+  })()));
+}
+// SUITE 138 : montage de l'application dans le #root de index.html (fichiers clairs).
+// React et ReactDOM sont fournis par vendor/ (chargÃ©s avant app.js par l'Ã©cran d'accÃ¨s).
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(React.createElement(App));
