@@ -2677,29 +2677,18 @@ function Kiosk132({
           height: rowH,
           borderBottom: "1px solid rgba(30,41,59,.42)"
         }
-      })), k132.isToday && k132.pm === nowMin >= TV_SPLIT && (() => {
-        // trait « maintenant » sur la ½ journée courante
-        const y = (nowMin / 60 - z.min) * rowH;
-        if (y < -2 || y > bodyH + 2) return null;
-        return /*#__PURE__*/React.createElement("div", {
-          className: "absolute left-0 right-0 pointer-events-none",
-          style: {
-            top: y,
-            borderTop: "2px solid rgba(96,165,250,.55)"
-          }
-        });
-      })(), laid.map((b, bi) => {
+      })), laid.map((b, bi) => {
         const e = b.ev;
         const top = (e.start.getHours() + e.start.getMinutes() / 60 - z.min) * rowH;
         const hgt = (e.end - e.start) / 36e5 * rowH;
         const c = colorFor(e, q.p, "promo");
         const w = unit * (b.c1 - b.c0 + 1) / b.nsub;
         const left = unit * b.c0 + w * b.lane;
-        const isNow = k132.isToday && refT >= e.start && refT < e.end; // SUITE 132e : halo (heure naviguée) du créneau en cours
+        const isNow = k132.isToday && refT >= e.start && refT < e.end; // SUITE 150 : voile de progression (heure naviguée) du créneau en cours
         const T = Math.max(hgt - 4, 16);
         return /*#__PURE__*/React.createElement("div", {
           key: e.id + "@" + e.start.getTime() + "#" + bi,
-          className: "absolute rounded-lg overflow-hidden text-center cq-case " + (isNow ? "z-[6] ring-4 ring-sky-300 shadow-[0_0_26px_8px_rgba(56,189,248,.75)]" : ""),
+          className: "absolute rounded-lg overflow-hidden text-center cq-case " + (isNow ? "z-[6]" : ""),
           style: {
             ...c.style,
             top: top + 2,
@@ -2708,17 +2697,19 @@ function Kiosk132({
             width: "calc(" + w + "% - 3px)",
             padding: "3px 5px"
           }
-        }, isNow && /*#__PURE__*/React.createElement("div", {
-          className: "absolute inset-0 pointer-events-none",
-          style: {
-            background: "rgba(255,255,255,.18)"
-          }
-        }), isNow && /*#__PURE__*/React.createElement("div", {
-          className: "absolute top-0 right-0 bg-sky-300 text-slate-900 font-black uppercase rounded-bl-md px-1.5 leading-tight",
-          style: {
-            fontSize: 10
-          }
-        }, "en cours"), tvdiff143.flags.get(e) && /*#__PURE__*/React.createElement("div", {
+        }, isNow && (() => {
+          // SUITE 150 : voile blanc translucide remplissant la case depuis le HAUT, bord bas NET — hauteur lissée par transition 30 s entre les rendus de l'horloge
+          const p150 = Math.max(0, Math.min(1, (refT - e.start) / Math.max(1, e.end - e.start)));
+          return /*#__PURE__*/React.createElement("div", {
+            className: "absolute left-0 right-0 top-0 pointer-events-none",
+            style: {
+              height: Math.round(p150 * T),
+              background: "rgba(255,255,255,.30)",
+              borderBottom: "2px solid rgba(255,255,255,.75)",
+              transition: "height 30s linear"
+            }
+          });
+        })(), tvdiff143.flags.get(e) && /*#__PURE__*/React.createElement("div", {
           className: "absolute pointer-events-none",
           style: {
             top: 2,
@@ -7153,60 +7144,6 @@ function App() {
       const tt = (e.start instanceof Date ? e.start : decDT(e.start)).getTime();
       if (tt > lastC95) lastC95 = tt;
     }
-    const jHor95 = persoTab === "fig" || !lastC95 ? Y.NW - 1 : Math.max(0, Math.min(Y.NW - 1, Math.round((startOfWeek(new Date(lastC95)).getTime() - baseW95.getTime()) / 6.048e8)));
-    const jEnd95 = Math.min(jNow95, jHor95); // fin du trace PLEIN (pointille ensuite jusq'a jHor95)
-    const wLbl = i => Y.WEEKS[i].date.toLocaleDateString("fr-FR", {
-      day: "numeric",
-      month: "short"
-    });
-    const wBar = i => "semaine du " + Y.WEEKS[i].date.toLocaleDateString("fr-FR") + " : " + fmtHrs(Y.WEEKS[i].tot) + (Y.WEEKS[i].tot ? " (CM " + fmtHrs(Y.WEEKS[i].cm) + " · TD " + fmtHrs(Y.WEEKS[i].td) + " · TP " + fmtHrs(Y.WEEKS[i].tp) + ")" : " (aucun créneau)") + " — clic = analyser ici";
-    const promoTot = {};
-    for (const w of Y.WEEKS) for (const p of Object.keys(w.byPromo)) promoTot[p] = Math.round(((promoTot[p] || 0) + w.byPromo[p]) * 100) / 100;
-    const promos = Object.keys(promoTot).sort((a, b) => promoTot[b] - promoTot[a]);
-    const big = Y.WEEKS.slice().sort((a, b) => b.tot - a.tot).slice(0, 3).sort((a, b) => a.i - b.i);
-    // Suite 93 : graphe de cumul (4 courbes) — géométrie et séries
-    const CH_W = 900,
-      CH_H = 170,
-      PL = 40,
-      PR = 10,
-      PT = 10,
-      PB = 18;
-    const chartMax = Math.max(...Y.CUM.map((c, j) => Y.oseAt(j).paid), persoService);
-    // SUITE 105 : onglet « Promos » — effectué 26-27 PAR PROMO à CE JOUR (heures réelles,
-    // mêmes exclusions que la Synthèse : persoTypeOf exclu + filtre MP explicite du toggle).
-    const now105 = Date.now();
-    const done105 = {};
-    for (const e of mpOnly ? liveEvs94.filter(ev => evInMpMask(ev, mpMask)) : liveEvs94) {
-      const tt105 = persoTypeOf(e);
-      if (tt105 === "exclu") continue;
-      const st105 = e.start instanceof Date ? e.start : decDT(e.start);
-      if (st105.getTime() > now105) continue;
-      const en105 = e.end instanceof Date ? e.end : decDT(e.end);
-      const pr105 = persoPromoOf105(e); // SUITE 105c : résolution centralisée (105b était incomplète : le flux peut envoyer « CiTiSE2-IUTD » sans préfixe Etud-)
-      const d105 = done105[pr105] || (done105[pr105] = {
-        cm: 0,
-        td: 0,
-        tp: 0
-      });
-      d105[tt105 === "cm" ? "cm" : tt105 === "td" ? "td" : "tp"] += (en105 - st105) / 3.6e6;
-    }
-    const doneTot105 = pr => {
-      const d = done105[pr] || {
-        cm: 0,
-        td: 0,
-        tp: 0
-      };
-      return Math.round((d.cm + d.td + d.tp) * 100) / 100;
-    };
-    const prevTot105 = pr => (arch137 && arch137.rapprochementOSE ? arch137.rapprochementOSE[pr] || [] : []).reduce((a, it) => a + (it.h || 0), 0); // SUITE 137 : rapprochement OSE de l ARCHIVE importée
-    const pct105 = (eff, prev) => prev > 0 ? Math.round(eff / prev * 1000) / 10 : null;
-    const ymax = Math.max(200, Math.ceil(chartMax * 1.08 / 100) * 100);
-    const cx = j => PL + j / 44 * (CH_W - PL - PR);
-    const cy = v => CH_H - PB - Math.min(v, ymax) / ymax * (CH_H - PT - PB);
-    const vAt = j => {
-      const o = Y.oseAt(j);
-      return {
-        brut: Y.CUM[j].tot,
         brutRef: Y.CUM[j].tot + o.ref,
         payeCours: o.paidCours,
         paye: o.paid
