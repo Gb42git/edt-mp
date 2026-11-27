@@ -2808,21 +2808,17 @@ function Kiosk132({
             }
           });
         })(), (() => {
-          // SUITE 159 : le tampon DIT le changement (recette 158 : « modifié » sans raison = perturbant)
-          const d159 = tvdiff143.flags.get(e);
-          if (!d159) return null;
-          const isNew159 = d159.ty === "new";
-          const ll159 = (d159.l || "").split(",").map(s2 => s2.trim()).filter(s2 => s2 && !/^virtuel[_-]/i.test(s2)).join(" "); // salle physique seule (148c2)
-          const txt159 = isNew159 ? "Nouveau" : "✎ " + [d159.hh ? fmtHM(d159.s) : null, d159.rm ? ll159 : null].filter(Boolean).join(" · "); // le NOUVEL horaire et/ou la NOUVELLE salle
-          const col159 = isNew159 ? "#22c55e" : "#f59e0b"; // vert = ajouté, ambre = modifié
+          // SUITE 160 : tampon de coin réservé aux AJOUTÉS (« NOUVEAU » vert) — les modifiés portent un ✎ INLINE devant le champ concerné (horaire et/ou salle), les supprimés gardent « ✗ SUPPRIMÉ » sur le fantôme
+          const d160n = tvdiff143.flags.get(e);
+          if (!d160n || d160n.ty !== "new") return null;
           return /*#__PURE__*/React.createElement("div", {
             className: "absolute pointer-events-none",
             style: {
               top: 2,
               right: 2,
               transform: "rotate(-8deg)",
-              color: col159,
-              border: "2px solid " + (isNew159 ? "rgba(34,197,94,.85)" : "rgba(245,158,11,.85)"),
+              color: "#22c55e",
+              border: "2px solid rgba(34,197,94,.85)",
               borderRadius: 8,
               padding: "1px 8px",
               fontSize: 15,
@@ -2832,7 +2828,7 @@ function Kiosk132({
               background: "rgba(15,23,42,.25)",
               zIndex: 7
             }
-          }, txt159);
+          }, "Nouveau");
         })(), (() => {
           const serB = tvBadge148(e, q.p);
           const tB = c.badge;
@@ -2852,6 +2848,9 @@ function Kiosk132({
           }, serB.n + "/" + serB.N));
           const title = tvAbbr(typeTitle(e.summary, tB === "TP" && e.end - e.start >= 2 * 36e5 ? null : tB, true));
           const loc148 = tvLoc148(e.location);
+          const d160m = tvdiff143.flags.get(e); // SUITE 160 : ✎ inline devant le champ modifié (déplacé → devant l'horaire, ressallé → devant la salle), plus de tampon de coin pour les modifiés
+          const penH160 = !!(d160m && d160m.ty === "mod" && d160m.hh);
+          const penR160 = !!(d160m && d160m.ty === "mod" && d160m.rm);
           if (T < 44) return /*#__PURE__*/React.createElement("div", {
             className: "flex items-center justify-center gap-1 leading-none whitespace-nowrap"
           }, /*#__PURE__*/React.createElement("span", {
@@ -2864,12 +2863,21 @@ function Kiosk132({
             style: {
               fontSize: "clamp(11px,8cqh,14px)"
             }
-          }, "\u23F0 " + fmtHM(e.start) + "–" + fmtHM(e.end)), loc148 && /*#__PURE__*/React.createElement("span", {
+          }, penH160 && /*#__PURE__*/React.createElement("span", {
+            style: {
+              color: "#f59e0b",
+              fontWeight: 900
+            }
+          }, "✎ "), "\u23F0 " + fmtHM(e.start) + "–" + fmtHM(e.end)), loc148 && /*#__PURE__*/React.createElement("span", {
             className: "flex-none font-black text-yellow-300",
             style: {
               fontSize: "clamp(11px,8cqh,15px)"
             }
-          }, loc148), badges);
+          }, penR160 && /*#__PURE__*/React.createElement("span", {
+            style: {
+              color: "#f59e0b"
+            }
+          }, "✎ "), loc148), badges);
           {/* SUITE 148c2 (recette devoir électrochimie 45 min) : la salle
               passe en COLONNE À DROITE de la case — pleine hauteur, texte
               aligné à gauche dedans — dès que l'empilement vertical ne tient
@@ -2908,12 +2916,21 @@ function Kiosk132({
             style: {
               fontSize: "clamp(14px,10cqh,17px)"
             }
-          }, "\u23F0 " + fmtHM(e.start) + "–" + fmtHM(e.end)), !needCol148 && loc148 && /*#__PURE__*/React.createElement("div", {
+          }, penH160 && /*#__PURE__*/React.createElement("span", {
+            style: {
+              color: "#f59e0b",
+              fontWeight: 900
+            }
+          }, "✎ "), "\u23F0 " + fmtHM(e.start) + "–" + fmtHM(e.end)), !needCol148 && loc148 && /*#__PURE__*/React.createElement("div", {
             className: "font-black text-yellow-300 leading-tight truncate",
             style: {
               fontSize: "clamp(22px,13cqh,28px)"
             }
-          }, loc148), T >= 76 && e.teacher && /*#__PURE__*/React.createElement("div", {
+          }, penR160 && /*#__PURE__*/React.createElement("span", {
+            style: {
+              color: "#f59e0b"
+            }
+          }, "✎ "), loc148), T >= 76 && e.teacher && /*#__PURE__*/React.createElement("div", {
             className: "opacity-70 leading-tight truncate",
             style: {
               fontSize: "clamp(13px,9cqh,17px)"
@@ -2935,7 +2952,11 @@ function Kiosk132({
             style: {
               fontSize: "clamp(22px,13cqh,28px)"
             }
-          }, loc148), badgesSide153 && /*#__PURE__*/React.createElement("span", {
+          }, penR160 && /*#__PURE__*/React.createElement("span", {
+            style: {
+              color: "#f59e0b"
+            }
+          }, "✎ "), loc148), badgesSide153 && /*#__PURE__*/React.createElement("span", {
             className: "inline-flex flex-col items-start gap-1 leading-none"
           }, tB && /*#__PURE__*/React.createElement("span", {
             className: "font-bold text-slate-900 bg-slate-100 rounded",
