@@ -2323,8 +2323,12 @@ function Kiosk132({
   busy,
   feedErrs,
   onRefresh,
+  feeds,
+  feedOverrides,
+  onFeedOverride,
   now
 }) {
+  // SUITE 157 : feeds/feedOverrides/onFeedOverride REÇUS d'App (154 les passait déjà) — leur absence faisait CRASHER le panneau ⚙ (ReferenceError feeds au rendu)
   // Horloge live (re-render toutes les 30 s — halo & bascule). `now` (tests uniquement) fige l'heure.
   const [tick, setTick] = useState(now || new Date());
   useEffect(() => {
@@ -2797,17 +2801,17 @@ function Kiosk132({
             right: 2,
             transform: "rotate(-8deg)",
             color: "#f59e0b",
-            border: "3px solid #f59e0b",
+            border: "2px solid rgba(245,158,11,.85)",
             borderRadius: 8,
             padding: "1px 8px",
             fontSize: 15,
             fontWeight: 900,
             textTransform: "uppercase",
             letterSpacing: ".04em",
-            background: "rgba(15,23,42,.85)",
+            background: "rgba(15,23,42,.25)",
             zIndex: 7
           }
-        }, "✎ modifié"), (() => {
+        }, "✎ modifié"), " // SUITE 157 : badge translucide", (() => {
           const serB = tvBadge148(e, q.p);
           const tB = c.badge;
           const bSt = {
@@ -2944,14 +2948,14 @@ function Kiosk132({
             left: "50%",
             transform: "translate(-50%,-50%) rotate(-8deg)",
             color: "#f59e0b",
-            border: "3px solid #f59e0b",
+            border: "2px solid rgba(245,158,11,.85)",
             borderRadius: 8,
             padding: "1px 8px",
             fontSize: 15,
             fontWeight: 900,
             textTransform: "uppercase",
             letterSpacing: ".04em",
-            background: "rgba(15,23,42,.7)"
+            background: "rgba(15,23,42,.25)"
           }
         }, "✎ modifié"));
       }));
@@ -3318,7 +3322,7 @@ function Kiosk132({
         fontSize: 22
       }
     }, "Groupes affichés"), PROMO_KEYS.map(p => {
-      const ls154 = tvLeaves(p).map(g => [g, false]).concat((HYP_LEAVES_154[p] || []).map(g => [g, true]));
+      const ls154 = tvLeaves(p).map(g => [g, false]).concat((HYP_LEAVES_154[p] || []).filter(g => dataHas154[p] && dataHas154[p][g]).map(g => [g, false])); // SUITE 157 : hypothétiques AFFICHÉES seulement si vivantes dans ADE (plus de « (à venir) » grisé)
       const promoOn154 = !grpHidden154(p, null);
       return /*#__PURE__*/React.createElement("div", {
         key: p,
@@ -3346,9 +3350,8 @@ function Kiosk132({
       }), /*#__PURE__*/React.createElement("div", {
         className: "flex flex-wrap gap-x-5 gap-y-1 pl-8"
       }, ls154.map(([g, hyp154]) => {
-        const alive154 = !hyp154 || !!(dataHas154[p] && dataHas154[p][g]);
-        const dis154 = hyp154 && !alive154 || !promoOn154;
-        return treeRow154(grpDisp(p, g) + (hyp154 ? " (à venir)" : ""), !grpHidden154(p, g), () => {
+        const dis154 = !promoOn154; // SUITE 157 : les hypothétiques sont filtrées en amont (ls154) — plus de ligne grise « (à venir) » ni d infobulle rentrée 2027
+        return treeRow154(grpDisp(p, g), !grpHidden154(p, g), () => {
           const n = {
             hide: {
               ...(tvGrp154.hide || {})
@@ -3356,7 +3359,7 @@ function Kiosk132({
           };
           if (!grpHidden154(p, g)) n.hide[p + "|" + g] = true;else delete n.hide[p + "|" + g];
           saveGrp154(n);
-        }, dis154, hyp154 && !alive154 ? "Groupe prévu à la rentrée 2027 — cochable dès qu'ADE lui donne des créneaux" : "");
+        }, dis154, "");
       })));
     }), /*#__PURE__*/React.createElement("div", {
       className: "flex items-center gap-3 mt-4"
