@@ -2806,9 +2806,9 @@ function Kiosk132({
           }, badges));
           if (!needCol148) return main148;
           return /*#__PURE__*/React.createElement("div", {
-            className: "flex h-full gap-2"
+            className: "flex h-full justify-center gap-2"
           }, /*#__PURE__*/React.createElement("div", {
-            className: "flex-1 min-w-0"
+            className: "min-w-0 max-w-full"
           }, main148), /*#__PURE__*/React.createElement("div", {
             className: "flex-none w-fit max-w-[46%] self-stretch flex items-center text-left"
           }, /*#__PURE__*/React.createElement("span", {
