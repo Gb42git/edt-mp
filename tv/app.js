@@ -2771,7 +2771,15 @@ function Kiosk132({
               Sinon l'empilement historique est conservé. */}
           const fS148 = Math.min(28, Math.max(22, 0.13 * T));
           const colW148 = (1920 - 58) * (q.leaves.length / totalLeaves) * ((b.c1 - b.c0 + 1) / (q.leaves.length * b.nsub));
-          const needCol148 = !!loc148 && (T < 76 || loc148.length * fS148 * 0.62 > colW148 * 0.88);
+          // SUITE 151 (recette : badges TD n/N tronqués sur le TP étroit Crouzet BUT1) :
+          // RÈGLE GÉOMÉTRIQUE UNIQUE — les badges (type + n/N) comptent dans le test de
+          // débordement au même titre que la salle ; ce qui ne tient pas en largeur part
+          // dans la colonne droite AVEC la salle, empilé VERTICALEMENT (une colonne :
+          // la hauteur est la ressource des cases étroites, jamais tronqué).
+          // Ce qui tient (TD/CM larges) garde sa ligne centrée actuelle.
+          const bTxt151 = (tB || "") + (serB ? serB.n + "/" + serB.N : "");
+          const bW151 = bTxt151.length * 14 * 0.62 + 22;
+          const needCol148 = (!!loc148 || !!bTxt151) && (T < 76 || loc148.length * fS148 * 0.62 + (loc148 ? bW151 : 0) > (colW148 - 10) * 0.88);
           const main148 = /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
             className: "font-semibold leading-tight line-clamp-2",
             style: {
@@ -2792,22 +2800,32 @@ function Kiosk132({
             style: {
               fontSize: isNow ? "clamp(15px,10cqh,19px)" : "clamp(13px,9cqh,17px)"
             }
-          }, e.teacher), /*#__PURE__*/React.createElement("div", {
+          }, e.teacher), !needCol148 && /*#__PURE__*/React.createElement("div", {
             className: "mx-auto w-fit"
           }, badges));
           if (!needCol148) return main148;
+          // SUITE 151 : la colonne droite porte la salle ET les badges empilés (colonne
+          // unique, collée au bloc infos — 148c3 conservé), badges jamais tronqués.
           return /*#__PURE__*/React.createElement("div", {
             className: "flex h-full justify-center gap-2"
           }, /*#__PURE__*/React.createElement("div", {
             className: "min-w-0 max-w-full"
           }, main148), /*#__PURE__*/React.createElement("div", {
-            className: "flex-none w-fit max-w-[46%] self-stretch flex items-center text-left"
-          }, /*#__PURE__*/React.createElement("span", {
+            className: "flex-none w-fit max-w-[46%] self-stretch flex flex-col justify-center items-start text-left gap-1"
+          }, loc148 && /*#__PURE__*/React.createElement("span", {
             className: "font-black text-yellow-300 break-words",
             style: {
               fontSize: isNow ? "clamp(26px,15cqh,34px)" : "clamp(22px,13cqh,28px)"
             }
-          }, loc148)));
+          }, loc148), bTxt151 && /*#__PURE__*/React.createElement("span", {
+            className: "inline-flex flex-col items-start gap-1 leading-none"
+          }, tB && /*#__PURE__*/React.createElement("span", {
+            className: "font-bold text-slate-900 bg-slate-100 rounded",
+            style: bSt
+          }, tB), serB && /*#__PURE__*/React.createElement("span", {
+            className: "font-bold text-slate-900 bg-slate-100 rounded",
+            style: bSt
+          }, serB.n + "/" + serB.N))));
         })());
       }), tvdiff143.on && tvdiff143.ghosts.filter(gh => gh.p === q.p && sameDay(gh.start, z.day) && (k132.pm ? gh.start.getHours() * 60 + gh.start.getMinutes() >= TV_SPLIT : gh.start.getHours() * 60 + gh.start.getMinutes() < TV_SPLIT)).map((gh, gi) => {
         const gLeaves143 = tvGhostLeaves143(gh.gs, q.leaves);
