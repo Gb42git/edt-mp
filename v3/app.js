@@ -2180,12 +2180,13 @@ const ADAPT_CSS_141C = [
 // temps reel, zero JS), remplissage hauteur d'abord, trop-plein rogne au bord
 // sans ellipsis, chaque ligne insécable (break-inside:avoid).
 ".cq-case .infos141e{columns:88px auto;column-fill:auto;column-gap:12px;text-align:left}", ".cq-case .infos141e>div{break-inside:avoid}"].join("\n");
-// SUITE 154 : styles propres au kiosk — (1) FUITE DE HAUTEUR Firefox : la scène
+// SUITE 154 : style propre au kiosk — FUITE DE HAUTEUR Firefox : la scène
 // 1920×1080 garde sa TAILLE DE LAYOUT même mise à l'échelle (transform scale ne
 // rétrécit pas le flux) → sur un écran logique plus bas que 1080 px le document
 // dépassait, un ASCENSEUR apparaissait à droite et le HAUT de la scène (titre)
-// était rogné ; (2) VAGUE ONDULANTE de la barre de progression globale.
-const KIOSK_CSS_154 = ["html,body{overflow:hidden}", ".gpwave154{position:absolute;right:-16px;top:-5px;width:32px;height:18px;animation:gpwave154 1.4s ease-in-out infinite}", "@keyframes gpwave154{0%,100%{transform:translate(-4px,2px)}50%{transform:translate(4px,-2px)}}"].join("\n");
+// était rogné. SUITE 155 : la vague ondulante de la 154 est RETIRÉE (recette —
+// la demande était le TRAIT « maintenant » horizontal, pas une barre à vague).
+const KIOSK_CSS_154 = ["html,body{overflow:hidden}"].join("\n");
 function tvAbbr(s) {
   // SUITE 132 : abréviation FR des intitulés ADE — règles connues, puis repli (mot > 11 lettres → coupé avec point)
   if (!s) return s;
@@ -2741,7 +2742,16 @@ function Kiosk132({
           height: rowH,
           borderBottom: "1px solid rgba(30,41,59,.42)"
         }
-      })), laid.map((b, bi) => {
+      })), k132.isToday && (() => {
+        const nm155 = nowT.getHours() * 60 + nowT.getMinutes();
+        return nm155 >= z.min * 60 && nm155 < z.max * 60 ? /*#__PURE__*/React.createElement("div", {
+          className: "absolute left-0 right-0 pointer-events-none z-[7]",
+          style: {
+            top: (nm155 - z.min * 60) / 60 * rowH,
+            borderTop: "2px solid rgba(96,165,250,.55)"
+          }
+        }) : null;
+      })(), laid.map((b, bi) => {
         const e = b.ev;
         const top = (e.start.getHours() + e.start.getMinutes() / 60 - z.min) * rowH;
         const hgt = (e.end - e.start) / 36e5 * rowH;
@@ -3115,42 +3125,10 @@ function Kiosk132({
     style: {
       fontSize: 16
     }
-  }, "›")))), /*#__PURE__*/React.createElement("div", {
-    className: "px-3",
-    style: {
-      height: 18,
-      flex: "none"
-    }
-  }, /*#__PURE__*/React.createElement("style", null, KIOSK_CSS_154), /*#__PURE__*/React.createElement("div", {
-    className: "relative rounded-full",
-    style: {
-      height: 8,
-      background: "rgba(255,255,255,.10)"
-    }
-  }, k132.isToday && (() => {
-    const zs154 = k132.zones.filter(z => z.promos.length);
-    if (!zs154.length) return null;
-    const mn154 = Math.min.apply(null, zs154.map(z => z.min)),
-      mx154 = Math.max.apply(null, zs154.map(z => z.max));
-    const f154 = Math.max(0, Math.min(1, (nowT.getHours() * 60 + nowT.getMinutes() - mn154 * 60) / ((mx154 - mn154) * 60)));
-    return /*#__PURE__*/React.createElement("div", {
-      className: "absolute left-0 top-0 bottom-0 rounded-full",
-      style: {
-        width: (f154 * 100).toFixed(2) + "%",
-        background: "linear-gradient(90deg,rgba(148,163,184,.32),rgba(226,232,240,.48))"
-      }
-    }, /*#__PURE__*/React.createElement("svg", {
-      className: "gpwave154",
-      viewBox: "0 0 40 18",
-      preserveAspectRatio: "none"
-    }, /*#__PURE__*/React.createElement("path", {
-      d: "M0 9 Q10 1 20 9 T40 9 V18 H0 Z",
-      fill: "rgba(226,232,240,.5)"
-    })));
-  })())), k132.empty ? /*#__PURE__*/React.createElement("div", {
+  }, "›")))), k132.empty ? /*#__PURE__*/React.createElement("div", {
     className: "grid",
     style: {
-      height: 972
+      height: 990
     }
   }, /*#__PURE__*/React.createElement("div", {
     className: "place-self-center text-slate-500",
@@ -3160,7 +3138,7 @@ function Kiosk132({
   }, "Aucun créneau à venir dans les 8 prochains jours.")) : /*#__PURE__*/React.createElement("div", {
     className: "flex flex-col gap-2 px-3 pb-2",
     style: {
-      height: 972
+      height: 990
     }
   }, zoneBlocks(k132.zones[0]), zoneBlocks(k132.zones[1])), optOpen154 && (() => {
     const feeds154 = feeds || [];
